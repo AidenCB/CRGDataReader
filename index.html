@@ -25,29 +25,29 @@
         packages = ["pandas"]
     </py-config>
 
-    <py-script>
-import pandas as pd
-from js import document
+<script type="py-script">
+    import pandas as pd
+    from js import document
 
-def process_file():
-    out = Element("output")
-    fileInput = document.getElementById("fileInput")
+    def process_file():
+        out = Element("output")
+        fileInput = document.getElementById("fileInput")
 
-    if fileInput.files.length == 0:
-        out.write("Please upload a file first.")
-        return
+        if fileInput.files.length == 0:
+            out.write("Please upload a file first.")
+            return
 
-    # Get uploaded file
-    file = fileInput.files.item(0)
-    text = await file.text()   # read file as text in browser
+        # Get uploaded file
+        file = fileInput.files.item(0)
+        text = await file.text()   # read file as text in browser
 
-    try:
-        df = pd.read_csv(pd.compat.StringIO(text))
-        out.write("File loaded successfully!\n")
-        out.write(str(df.head()))
-    except Exception as e:
-        out.write(f"Error reading file: {e}")
-    </py-script>
+        try:
+            df = pd.read_csv(pd.compat.StringIO(text))
+            out.write("File loaded successfully!\n")
+            out.write(str(df.head()))
+        except Exception as e:
+            out.write(f"Error reading file: {e}")
+    </script>
 
 </body>
 </html>
