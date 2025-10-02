@@ -279,7 +279,7 @@ if uploadedFile is not None:
     if 'lastFilename' not in st.session_state or st.session_state.lastFilename != uploadedFile.name:
         try:
             if uploadedFile.name.endswith((".csv", ".txt")):
-                dfRaw = pd.read_csv(uploadedFile) 
+                dfRaw = pd.read_csv(uploadedFile, header=None) 
             elif uploadedFile.name.endswith((".xlsx", ".xls")):
                 dfRaw = pd.read_excel(uploadedFile)
             else:
