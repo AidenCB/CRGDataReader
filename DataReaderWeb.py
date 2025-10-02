@@ -433,7 +433,7 @@ if uploadedFile is not None:
         st.subheader("Column datatypes")
         st.write(workingDf.dtypes)
 
-        editAction = st.selectbox("Edit datatypes", ["None", "Change datatype"])
+        editAction = st.selectbox("Edit datatypes", ["Change datatype"])
         if editAction == "None":
             pass
         elif editAction == "Change datatype":
