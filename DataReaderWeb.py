@@ -114,7 +114,7 @@ def cleanData(mainDf):
         if df[column].dtype == 'object':
             converted = pd.to_numeric(df[column], errors='coerce')
             # Does NOT have NaN, convert to numeric
-            if not (converted.isna().any):
+            if not (converted.isna().all):
                 df[column] = converted 
 
 
