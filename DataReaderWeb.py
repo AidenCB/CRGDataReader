@@ -256,25 +256,24 @@ def editData(df, action, **kwargs):
                 dfLocal[f"{colToEdit}_second"] = dfLocal[colToEdit].dt.second
             else:
                 raise ValueError(f"Unknown component {comp}")
-
         return dfLocal
 
     else:
         raise ValueError("Unknown action")
 
-def saveData(df, saveChoice, newFilename=None, originalFilename=None):
-    # saveChoice: 'new', 'overwrite', or 'none'
-    if saveChoice == 'new':
-        if newFilename is None:
-            raise ValueError("newFilename required for saveChoice 'new'")
-        df.to_csv(newFilename, index=False)
-        return f"Dataframe saved to {newFilename}"
-    elif saveChoice == 'overwrite':
-        if originalFilename is None:
-            raise ValueError("originalFilename required for overwrite")
-        df.to_csv(originalFilename, index=False)
-        return f"Dataframe overwritten to {originalFilename}"
-    else:
+# def saveData(df, saveChoice, newFilename=None, originalFilename=None):
+#     # saveChoice: 'new', 'overwrite', or 'none'
+#     if saveChoice == 'new':
+#         if newFilename is None:
+#             raise ValueError("newFilename required for saveChoice 'new'")
+#         df.to_csv(newFilename, index=False)
+#         return f"Dataframe saved to {newFilename}"
+#     elif saveChoice == 'overwrite':
+#         if originalFilename is None:
+#             raise ValueError("originalFilename required for overwrite")
+#         df.to_csv(originalFilename, index=False)
+#         return f"Dataframe overwritten to {originalFilename}"
+#     else:
         return "Dataframe not saved"
 
 # -----------------------
@@ -282,8 +281,8 @@ def saveData(df, saveChoice, newFilename=None, originalFilename=None):
 # -----------------------
 
 st.set_page_config(page_title="DataReader Web", layout="wide")
-st.title("DataReader Web App")
-st.write("Web port of DataReader.py")
+st.title("Datareader Web App")
+st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
 
 # File uploader
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
@@ -349,7 +348,6 @@ if uploadedFile is not None:
             "Numeric Statistics",
             "Categorical Statistics",
             "Datatypes",
-            "Unique Values per Column",
             "Display Dates",
             "Display Uniques",
             "Clean Data",
@@ -435,10 +433,19 @@ if uploadedFile is not None:
         st.subheader("Column datatypes")
         st.write(workingDf.dtypes)
 
-    # ---------- Unique Values per Column ----------
-    elif mainMenu == "Unique Values per Column":
-        st.subheader("Unique counts per column")
-        st.write(workingDf.nunique())
+        editAction = st.selectbox("Edit datatypes", ["None", "Change datatype"])
+        if editAction == "None":
+            pass
+        elif editAction == "Change datatype":
+            colToChange = st.selectbox("Select column to change datatype", workingDf.columns.tolist())
+            dtypeChoice = st.selectbox("Target datatype", ["int", "float", "string", "date"])
+            if st.button("Change datatype"):
+                try:
+                    workingDf = editData(workingDf, 'changeDatatype', colToChange=colToChange, dtypeChoice=dtypeChoice)
+                    st.session_state.workingDf = workingDf
+                    st.success(f"Converted {colToChange} to {dtypeChoice}")
+                except Exception as e:
+                    st.error(str(e))
 
     # ---------- Display Dates ----------
     elif mainMenu == "Display Dates":
@@ -472,7 +479,7 @@ if uploadedFile is not None:
     # ---------- Edit Dataframe ----------
     elif mainMenu == "Edit Dataframe":
         st.subheader("Edit dataframe")
-        editAction = st.selectbox("Choose edit action", ["View head", "Rename column", "Delete column", "Change datatype", "Drop duplicates", "Sort by column", "Change Date"])
+        editAction = st.selectbox("Choose edit action", ["View head", "Rename column", "Delete column", "Drop duplicates", "Sort by column", "Change Date"])
         if editAction == "View head":
             numShow = st.number_input("Rows to show", min_value=1, max_value=1000, value=5)
             st.dataframe(editData(workingDf, 'viewHead', numShow=numShow))
@@ -495,17 +502,6 @@ if uploadedFile is not None:
                     workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
                     st.session_state.workingDf = workingDf
                     st.success(f"Deleted column {colToDelete}")
-                except Exception as e:
-                    st.error(str(e))
-
-        elif editAction == "Change datatype":
-            colToChange = st.selectbox("Select column to change datatype", workingDf.columns.tolist())
-            dtypeChoice = st.selectbox("Target datatype", ["int", "float", "string", "date"])
-            if st.button("Change datatype"):
-                try:
-                    workingDf = editData(workingDf, 'changeDatatype', colToChange=colToChange, dtypeChoice=dtypeChoice)
-                    st.session_state.workingDf = workingDf
-                    st.success(f"Converted {colToChange} to {dtypeChoice}")
                 except Exception as e:
                     st.error(str(e))
 
@@ -619,18 +615,14 @@ if uploadedFile is not None:
     # ---------- Save / Export ----------
     elif mainMenu == "Save / Export":
         st.subheader("Save or export working dataframe")
-        saveChoice = st.radio("Save options", ["Download CSV (local)", "Save as new file on server (if permitted)", "Overwrite original file (if allowed)"])
-        if saveChoice == "Download CSV (local)":
-            csvBytes = workingDf.to_csv(index=False).encode('utf-8')
-            st.download_button("Download CSV", csvBytes, file_name="processed_data.csv", mime="text/csv")
-        elif saveChoice == "Save as new file on server (if permitted)":
+        saveChoice = st.radio("Save options", ["New File", "Same file"])
+        if saveChoice == "New File":
             newFilename = st.text_input("Enter new filename (end with .csv)")
-            if st.button("Save to server"):
-                if not newFilename.endswith('.csv'):
-                    st.error("Filename must end with .csv")
-                else:
-                    workingDf.to_csv(newFilename, index=False)
-                    st.success(f"Saved to {newFilename}")
+            if not newFilename.endswith('.csv'):
+                st.error("Filename must end with .csv")
+            else:
+                workingDf.to_csv(newFilename, index=False)
+                st.success(f"Saved to {newFilename}")
         elif saveChoice == "Overwrite original file (if allowed)":
             if 'filename' in df.attrs:
                 if st.button("Overwrite original upload"):
