@@ -268,9 +268,6 @@ if uploadedFile is not None:
         else:
             raise ValueError("Unsupported file type")
 
-        # Clean automatically
-        df = cleanData(dfRaw)
-
         st.success("File uploaded and cleaned successfully.")
         st.write("Preview of cleaned data:")
         st.dataframe(df.head())
@@ -282,14 +279,17 @@ if uploadedFile is not None:
     # store original filename
     dfRaw.attrs['filename'] = uploadedFile.name
 
+
     # header detection logic
     headerExists = False
-    if useHeaderDetection:
-        try:
-            headerExists = checkHeader(dfRaw)
-        except Exception:
+    if checkHeader(dfRaw):
+        headerExists = checkHeader(dfRaw)
+    except Exception:
             headerExists = False
-
+   
+    # Clean automatically
+    df = cleanData(dfRaw)
+    
     # Offer user choice to override
     headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
     if headerOverride == "Auto detect":
