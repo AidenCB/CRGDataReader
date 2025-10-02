@@ -120,7 +120,8 @@ def cleanData(mainDf):
         if df[column].dtype == 'object':
             converted = pd.to_numeric(df[column], errors='coerce')
             # Does NOT have NaN, convert to numeric
-            if not (converted.isna().all()):
+            nanCount = converted.isna().sum()
+            if not (nanCount == len(df) or nanCount > (len(df) * 0.8)):
                 df[column] = converted 
 
 
