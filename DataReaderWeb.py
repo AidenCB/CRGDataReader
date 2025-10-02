@@ -117,7 +117,7 @@ def cleanData(mainDf):
     df = getDateTime(df)
 
     # Replace common placeholders with NaN
-    placeholders = [-999, 999, -9, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200]
+    placeholders = [-999, 999, -9, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200, np.nan, None]
     for col in df.columns:
         for pch in placeholders:
             df[col] = df[col].replace(to_replace=pch, value=np.nan)
@@ -289,10 +289,6 @@ if uploadedFile is not None:
     df = cleanData(dfRaw)
     st.session_state.workingDf = df.copy()
 
-
-    st.write("Preview of cleaned data:")
-    st.dataframe(df.head())
-
     # # Offer user choice to override
     # headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
     # if headerOverride == "Auto detect":
@@ -314,9 +310,6 @@ if uploadedFile is not None:
 
     # keep a working copy
     if 'workingDf' not in st.session_state:
-        st.session_state.workingDf = dfRaw.copy()
-    else:
-        # if uploaded new file, replace working df
         st.session_state.workingDf = dfRaw.copy()
 
     st.sidebar.subheader("Main Menu")
