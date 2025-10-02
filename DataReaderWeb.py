@@ -297,58 +297,48 @@ st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
 dfRaw = None
 
-if uploadedFile is not None:
-    try:
-        if uploadedFile.name.endswith((".csv", ".txt")):
-            dfRaw = pd.read_csv(uploadedFile)
-        elif uploadedFile.name.endswith((".xlsx", ".xls")):
-            dfRaw = pd.read_excel(uploadedFile)
-        else:
-            raise ValueError("Unsupported file type")
-
-        st.success("File uploaded and cleaned successfully.")
-
-    except Exception as e:
-        st.error(f"Error reading or cleaning file: {e}")
-        df = None 
-
-    # store original filename
-    dfRaw.attrs['filename'] = uploadedFile.name
-
-    df = dfRaw.copy()
-
-    # If header exists, convert first row into header
-    if checkHeader(dfRaw):
-        # Convert first row values to lowercase if they are strings
-        fixedCol = []
-        for val in df.iloc[0]:
-            if isinstance(val, str):
-                fixedCol.append(val.strip().lower())
-            else:
-                fixedCol.append(val)
-
-        df.columns = fixedCol
-        df = df.drop(index=0)
-        df = df.reset_index(drop=True)  # Remove the old header row, reset index
-    else:
-        # create default column names
-        df.columns = [f"col_{i}" for i in range(len(df.columns))]
-    
-    # Clean automatically
-    df = cleanData(dfRaw)
-    st.session_state.workingDf = df.copy()
-
-    # # Offer user choice to override
-    # headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
-    # if headerOverride == "Auto detect":
-    #     headerExistsFinal = headerExists
-    # else:
-    #     headerExistsFinal = True if headerOverride == "Yes" else False
-
-
-    # keep a working copy
+if uploadedFile is not None:\
     if 'workingDf' not in st.session_state:
-        st.session_state.workingDf = dfRaw.copy()
+        # Read file
+        try:
+            if uploadedFile.name.endswith((".csv", ".txt")):
+                dfRaw = pd.read_csv(uploadedFile)
+            elif uploadedFile.name.endswith((".xlsx", ".xls")):
+                dfRaw = pd.read_excel(uploadedFile)
+            else:
+                raise ValueError("Unsupported file type")
+
+            st.success("File uploaded and cleaned successfully.")
+
+        except Exception as e:
+            st.error(f"Error reading or cleaning file: {e}")
+            df = None 
+
+        # store original filename
+        dfRaw.attrs['filename'] = uploadedFile.name
+
+        df = dfRaw.copy()
+
+        # If header exists, convert first row into header
+        if checkHeader(dfRaw):
+            # Convert first row values to lowercase if they are strings
+            fixedCol = []
+            for val in df.iloc[0]:
+                if isinstance(val, str):
+                    fixedCol.append(val.strip().lower())
+                else:
+                    fixedCol.append(val)
+
+            df.columns = fixedCol
+            df = df.drop(index=0)
+            df = df.reset_index(drop=True)  # Remove the old header row, reset index
+        else:
+            # create default column names
+            df.columns = [f"col_{i}" for i in range(len(df.columns))]
+            
+        # Clean automatically
+        df = cleanData(dfRaw)
+        st.session_state.workingDf = df.copy()
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
