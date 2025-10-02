@@ -322,8 +322,6 @@ if uploadedFile is not None:
 
     # Always work with session copy
     workingDf = st.session_state.get("workingDf", None)
-else:
-    workingDf = None
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
