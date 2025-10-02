@@ -128,7 +128,7 @@ def cleanData(mainDf):
         for pch in placeholders:
             df[col] = df[col].replace(to_replace=pch, value=np.nan)
 
-    # Drop rows/columns with >= 50% missing values (threshold based on original code)
+    # Drop rows/columns with >= 75% missing values 
     df = df.dropna(axis=0, thresh=(len(df.columns) // 3))
     df = df.dropna(axis=1, thresh=(len(df.columns) // 3))
 
@@ -293,6 +293,8 @@ if uploadedFile is not None:
    
     # Clean automatically
     df = cleanData(dfRaw)
+    st.session_state.workingDf = df.copy()
+
 
     st.write("Preview of cleaned data:")
     st.dataframe(df.head())
@@ -446,7 +448,6 @@ if uploadedFile is not None:
         st.write("Use these actions to clean the working dataframe. Changes are applied to the working copy.")
 
         if st.button("Reset working dataframe to original upload"):
-            st.session_state.workingDf = df.copy()
             workingDf = st.session_state.workingDf
             st.success("Reset complete")
             st.dataframe(workingDf.head())
