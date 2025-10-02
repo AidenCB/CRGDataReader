@@ -115,6 +115,22 @@ def getDateTime(copyDf):
 def cleanData(mainDf):
     df = mainDf.copy()
 
+    # If header exists, convert first row into header
+    if checkHeader(df):
+        # Convert first row values to lowercase if they are strings
+        fixedCol = []
+        for val in df.iloc[0]:
+            if isinstance(val, str):
+                fixedCol.append(val.strip().lower())
+            else:
+                fixedCol.append(val)
+
+        df.columns = fixedCol
+        df = df.drop(index=0)
+        df = df.reset_index(drop=True)  # Remove the old header row, reset index
+    else:
+        # create default column names
+        df.columns = [f"col_{i}" for i in range(len(df.columns))]
 
     # Remove commas from numbers and replacing with periods
     for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
@@ -298,47 +314,41 @@ uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "
 dfRaw = None
 
 if uploadedFile is not None:
-    if 'workingDf' not in st.session_state:
-        # Read file
+    # Always reload on new file
+    if 'lastFilename' not in st.session_state or st.session_state.lastFilename != uploadedFile.name:
         try:
             if uploadedFile.name.endswith((".csv", ".txt")):
-                dfRaw = pd.read_csv(uploadedFile)
+                dfRaw = pd.read_csv(uploadedFile, dtype=str)  # read as string to avoid stockNo issue
             elif uploadedFile.name.endswith((".xlsx", ".xls")):
-                dfRaw = pd.read_excel(uploadedFile)
+                dfRaw = pd.read_excel(uploadedFile, dtype=str)
             else:
                 raise ValueError("Unsupported file type")
 
-            st.success("File uploaded and cleaned successfully.")
+            st.success("File uploaded successfully.")
+
+            # Store original filename
+            st.session_state.lastFilename = uploadedFile.name
+            dfRaw.attrs['filename'] = uploadedFile.name
+            st.session_state.dfRaw = dfRaw.copy()
+
+            # Header check & cleaning only once per new file
+            if checkHeader(dfRaw):
+                fixedCol = [val.strip().lower() if isinstance(val, str) else val for val in dfRaw.iloc[0]]
+                dfRaw.columns = fixedCol
+                dfRaw = dfRaw.drop(index=0).reset_index(drop=True)
+            else:
+                dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
+
+            # Clean only once
+            st.session_state.workingDf = cleanData(dfRaw)
 
         except Exception as e:
-            st.error(f"Error reading or cleaning file: {e}")
-            df = None 
+            st.error(f"Error reading file: {e}")
+            st.session_state.workingDf = None
 
-        # store original filename
-        dfRaw.attrs['filename'] = uploadedFile.name
-
-        df = dfRaw.copy()
-
-        # If header exists, convert first row into header
-        if checkHeader(dfRaw):
-            # Convert first row values to lowercase if they are strings
-            fixedCol = []
-            for val in df.iloc[0]:
-                if isinstance(val, str):
-                    fixedCol.append(val.strip().lower())
-                else:
-                    fixedCol.append(val)
-
-            df.columns = fixedCol
-            df = df.drop(index=0)
-            df = df.reset_index(drop=True)  # Remove the old header row, reset index
-        else:
-            # create default column names
-            df.columns = [f"col_{i}" for i in range(len(df.columns))]
-            
-        # Clean automatically
-        df = cleanData(dfRaw)
-        st.session_state.workingDf = df.copy()
+else:
+    # From here on, always work with session_state
+    df = st.session_state.get('workingDf', None)
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
