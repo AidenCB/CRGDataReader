@@ -409,9 +409,9 @@ if uploadedFile is not None:
                 st.warning("No categorical columns found in the dataset.")
                 return None
 
-        st.write("Categorical Statistics")
-        st.write(catCols.describe())
-        return catCols.describe()
+            st.write("Categorical Statistics")
+            st.write(catCols.describe())
+            return catCols.describe()
 
     # ---------- Datatypes ----------
     elif mainMenu == "Datatypes":
