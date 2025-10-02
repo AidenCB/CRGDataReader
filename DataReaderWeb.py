@@ -472,7 +472,7 @@ if uploadedFile is not None:
     # ---------- Edit Dataframe ----------
     elif mainMenu == "Edit Dataframe":
         st.subheader("Edit dataframe")
-        editAction = st.selectbox("Choose edit action", ["View head", "Rename column", "Delete column", "Change datatype", "Drop duplicates", "Sort by column"])
+        editAction = st.selectbox("Choose edit action", ["View head", "Rename column", "Delete column", "Change datatype", "Drop duplicates", "Sort by column", "Change Date"])
         if editAction == "View head":
             numShow = st.number_input("Rows to show", min_value=1, max_value=1000, value=5)
             st.dataframe(editData(workingDf, 'viewHead', numShow=numShow))
