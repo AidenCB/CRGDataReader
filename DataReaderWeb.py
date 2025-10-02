@@ -291,7 +291,6 @@ if uploadedFile is not None:
     # If header exists, convert first row into header
     if headerExists:
         # promote first row to header
-        df = dfRaw.copy()
         newHeader = df.iloc[0].astype(str).str.lower().tolist()
         df = df[1:].reset_index(drop=True)
         df.columns = newHeader
