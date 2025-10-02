@@ -593,31 +593,26 @@ if uploadedFile is not None:
     # ---------- Save / Export ----------
     elif mainMenu == "Save / Export":
         st.subheader("Save or export working dataframe")
-
-        saveChoice = st.radio("Save options", ["New File", "Overwrite original file (if allowed)"])
-
-        if saveChoice == "New File":
-            newFilename = st.text_input("Enter new filename (end with .csv)")
-            if newFilename:
-                if not newFilename.endswith('.csv'):
-                    st.error("Filename must end with .csv")
-                else:
-                    workingDf.to_csv(newFilename, index=False)
-                    st.success(f"Saved to {newFilename}")
-
-        elif saveChoice == "Overwrite original file (if allowed)":
-            # Use stored dfRaw attrs, not workingDf
-            if "dfRaw" in st.session_state and "filename" in st.session_state.dfRaw.attrs:
-                originalFilename = st.session_state.dfRaw.attrs["filename"]
-                if st.button("Overwrite original upload"):
-                    try:
-                        workingDf.to_csv(originalFilename, index=False)
-                        st.success(f"Overwrote {originalFilename}")
-                    except Exception as e:
-                        st.error(f"Could not overwrite: {e}")
-            else:
-                st.warning("No original filename available to overwrite.")
-
+    
+        # Default export filename = original + "_edited.csv"
+        defaultFilename = "export.csv"
+        if "dfRaw" in st.session_state and "filename" in st.session_state.dfRaw.attrs:
+            base = st.session_state.dfRaw.attrs["filename"].rsplit(".", 1)[0]
+            defaultFilename = f"{base}_edited.csv"
+    
+        # Text input so user can rename before downloading
+        newFilename = st.text_input("Filename for download", defaultFilename)
+    
+        # Convert working df to CSV
+        csv = workingDf.to_csv(index=False).encode("utf-8")
+    
+        # Download button
+        st.download_button(
+            label="Download CSV",
+            data=csv,
+            file_name=newFilename,
+            mime="text/csv"
+        )
 
     # Update session state workingDf
     st.session_state.workingDf = workingDf
