@@ -275,6 +275,7 @@ if uploadedFile is not None:
     except Exception as e:
         st.error(f"Error reading or cleaning file: {e}")
         df = None
+        return 
 
     # store original filename
     dfRaw.attrs['filename'] = uploadedFile.name
@@ -443,11 +444,6 @@ if uploadedFile is not None:
     elif mainMenu == "Clean Data":
         st.subheader("Clean data options")
         st.write("Use these actions to clean the working dataframe. Changes are applied to the working copy.")
-        if st.button("Run automatic clean (convert types, fill placeholders, drop sparse rows/cols)"):
-            workingDf = cleanData(workingDf)
-            st.session_state.workingDf = workingDf
-            st.success("Clean complete")
-            st.dataframe(workingDf.head())
 
         if st.button("Reset working dataframe to original upload"):
             st.session_state.workingDf = df.copy()
