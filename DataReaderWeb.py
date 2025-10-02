@@ -1,103 +1,23 @@
-import pandas as pd 
+import streamlit as st
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import sys
+import seaborn as sns
+from datetime import datetime
 
-def main():
-    if (verifyFile()):
-        return
+# -----------------------
+# Helper functions (ported from DataReader.py)
+# -----------------------
 
-    filename = sys.argv[1]
-    if (filename[-3:].lower() in ['csv', 'txt']):
-        df = pd.read_csv(pd.compat.StringIO(text), header=None, sep=None, engine='python')
-    elif (filename[-3:].lower() in ['xls', 'xlsx']):
-        df = convertXLS(pd.compat.StringIO(text))
-
-    # Store filename in dataframe attributes
-    df.attrs['filename'] = filename
-    
-    # Set the header
-    if checkHeader(df):
-        # Convert first row values to lowercase if they are strings
-        fixedCol = []
-        for val in df.iloc[0]:
-            if isinstance(val, str):
-                fixedCol.append(val.strip().lower())
-            else:
-                fixedCol.append(val)
-
-        df.columns = fixedCol
-        df = df.drop(index=0)
-        df = df.reset_index(drop=True)  # Remove the old header row, reset index
-    else:
-        df.columns = range(len(df.columns)) # To set header to just be integers
-
-    # Remove duplicates based on all columns and reset index
-    df = df.drop_duplicates()
-    df = df.reset_index(drop=True)
-
-    # Cleans data after setting header
-    df = cleanData(df)
-
-    loop = True
-    while loop:
-        userChoice = input(
-        "\n1. View/Edit Dataframe" # Opens menu to view/edit dataframe
-        "\n2. Show Math Information" # Opens menu to show mathematical information depending if numeric or categorical
-        "\n3. Visualize Data" # Uses matplotlib to create graphs on data
-        "\n4. Save Dataframe" # Saves dataframe to new file or overwrites existing file 
-        "\n5. Show Date Information" # Shows information for date columns if they exist
-        "\n6. Exit"
-        "\nInput: "
-        )
-        if userChoice.isdigit():
-            userChoice = int(userChoice)
-            if userChoice == 1:
-                df = editData(df)
-            elif userChoice == 2:
-                showMathInfo(df)
-            elif userChoice == 3:
-                visualizeData(df)
-            elif userChoice == 4:
-                saveData(df)
-            elif userChoice == 5:
-                displayDates(df)
-            elif userChoice == 6:
-                loop = False
-        else:
-            print("Input only a number 1-6")
-
-# Returns True if file is not 'good' to use
-def verifyFile():
-    if (len(sys.argv) >= 3):
-        print("Too many arguments passed to command line.")
-        return True
-    elif (len(sys.argv) < 2):
-        print("Not enough arguments passed to command line.")
-        return True
-    if (sys.argv[1][-3:].lower() not in ['csv', 'xls', 'xlsx', 'txt']):
-        print("Enter only a csv, or xls/xlsx file.")
-        return True        
-    
-# Converts a spreadsheet file to a csv file
-def convertXLS(filename):
-    file = pd.read_excel(filename)
-    filename = filename[:-3] + "csv"
-    file.to_csv(filename, header=None)
-    df = pd.read_csv(filename, header=None, sep=None, engine='python')
-    return df
-
-# Checks first 2 rows of data frame to determine if there is a header
 def checkHeader(mainDf):
     df = mainDf.copy()
     if len(df) < 1:
         return False
-    
+
     totalVals = len(df.iloc[0])
     stringVals = sum(isinstance(val, str) for val in df.iloc[0])
 
-    # Ratio check with threshold of 75%
-    if (stringVals / totalVals) < .85:
+    if (stringVals / totalVals) < 0.85:
         return False
 
     if len(df) < 2:
@@ -105,22 +25,15 @@ def checkHeader(mainDf):
 
     secondRowStrings = sum(isinstance(val, str) for val in df.iloc[1])
 
-    # If second row is under the threshold we can assume first row is header
-    if secondRowStrings / totalVals < .5:
-        return True
-    
-    # First row and second row are all strings
-    # Need to compare to ensure that first row doesn't have same values as second row
-    if df.iloc[0].equals(df.iloc[1]):
-        # Row 1 = Row 2
-        return False
-    else:
-        # Row 1 != Row 2
+    if (secondRowStrings / totalVals) < 0.5:
         return True
 
-# Parses a column to see if it can be converted into datetime
-def dateTimeColumn(series):   
-    # Copy so we don’t mutate input directly
+    if df.iloc[0].equals(df.iloc[1]):
+        return False
+    else:
+        return True
+
+def dateTimeColumn(series):
     s = series.copy()
 
     dateFormats = ["%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y",
@@ -133,52 +46,37 @@ def dateTimeColumn(series):
         "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m-%d-%Y %H:%M:%S", "%m-%d-%Y %H:%M",
         "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M",
         "%m/%d/%y %H:%M:%S", "%m/%d/%y %H:%M", "%m-%d-%y %H:%M:%S", "%m-%d-%y %H:%M",
-        "%d/%m/%y %H:%M:%S", "%d/%m/%y %H:%M", "%d-%m-%y %H:%M:%S", "%d-%m-%y %H:%M", "%YYYY"
+        "%d/%m/%y %H:%M:%S", "%d/%m/%y %H:%M", "%d-%m-%y %H:%M:%S", "%d-%m-%y %H:%M"
     ]
 
     successful = False
-
-    # Try based on column name hint
-    colname = s.name.lower() if isinstance(s.name, str) else ""
-
-    if "date" in colname:
-        for fmt in genericFormats + dateFormats:
-            converted = pd.to_datetime(s, format=fmt, errors="coerce")
+    # Try generic formats first
+    for fmt in genericFormats + dateFormats + timeFormats:
+        try:
+            converted = pd.to_datetime(s, format=fmt, errors='coerce')
+            # if conversion produced some dates (not all NaT), accept
             if not converted.isna().all():
+                # When convert, keep original non-convertible values as NaT
                 s = converted
                 successful = True
                 break
+        except Exception:
+            continue
 
-    elif "time" in colname:
-        for fmt in timeFormats:
-            converted = pd.to_datetime(s, format=fmt, errors="coerce")
-            if not converted.isna().all():
-                s = converted.dt.time
-                successful = True
-                break
-
-    # Try all generic formats if nothing worked yet
+    # Fallback: try to let pandas infer format
     if not successful:
-        for fmt in genericFormats + dateFormats + timeFormats:
-            converted = pd.to_datetime(s, format=fmt, errors="coerce")
+        try:
+            converted = pd.to_datetime(s, errors='coerce', infer_datetime_format=True)
             if not converted.isna().all():
-                if "H" in fmt:   # crude check → format includes time
-                    try:
-                        s = converted.dt.time
-                    except Exception:
-                        s = converted
-                else:
-                    s = converted
+                s = converted
                 successful = True
-                break
+        except Exception:
+            successful = False
 
-    # If still failed, return original
     if not successful:
         return series
-
     return s
 
-# Function to test columns against different date formats
 def getDateTime(copyDf):
     df = copyDf.copy()
     dateColumns = []
@@ -187,397 +85,515 @@ def getDateTime(copyDf):
         original = df[column].copy()
         converted = dateTimeColumn(df[column])
 
-        # If conversion actually changed the data (not all NaT)
         if not converted.equals(original):
             df[column] = converted
             dateColumns.append(column)
 
-    # Rename date columns
+    # Rename date columns to match original behavior
     if len(dateColumns) == 1:
         df = df.rename(columns={dateColumns[0]: 'date'})
     elif len(dateColumns) > 1:
         df = df.rename(columns={dateColumns[0]: 'date1'})
 
     df.attrs['date_columns'] = dateColumns
-
     return df
 
-# Cleans the data of the dataframe
-# Clears special characters (saves only: space, numbers, and characters)
-# Clears empty rows with >50% missing data, fills data for less
 def cleanData(mainDf):
     df = mainDf.copy()
 
-    # Remove commas from numbers and replacing with periods
-    for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
-        df[column] = df[column].str.replace(',', '.', regex=True)
+    # Remove commas replaced with periods for numeric-like strings
+    for column in df.select_dtypes(include="object").columns:
+        df[column] = df[column].astype(str).str.replace(',', '.', regex=True)
 
-    # Check if strings contain "date" characters
-    for column in df.select_dtypes(include="object").columns: 
-    # Check for "/", "-" 
-        if df[column].str.contains(r'[\/\-]').any():
+    # If string seems to contain date separators, try datetime conversion
+    for column in df.select_dtypes(include="object").columns:
+        if df[column].astype(str).str.contains(r'[\/\-]').any():
             df[column] = dateTimeColumn(df[column])
 
-    # Convert strings to numbers
-    # Do it FIRST because it might convert numbers to date incorrectly otherwise
+    # Convert convertible strings to numeric
     for column in df.columns:
-        if df[column].dtype == 'object':
-            converted = pd.to_numeric(df[column], errors='coerce')
-            # Does NOT have NaN, convert to numeric
-            if not (converted.isna().all()):
-                df[column] = converted 
+        converted = pd.to_numeric(df[column], errors='coerce')
+        if not converted.isna().all():
+            df[column] = converted
 
     numericColumns = df.select_dtypes(include=['number']).columns
 
     # Convert strings to dates
     df = getDateTime(df)
 
-    # Replacing common placeholder values
-    placeholders = [-999, 999, -9999, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200]
+    # Replace common placeholders with NaN
+    placeholders = [-999, 999, -9, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200]
     for col in df.columns:
         for pch in placeholders:
             df[col] = df[col].replace(to_replace=pch, value=np.nan)
 
-   # Drop rows and columns with >=50% missing values
+    # Drop rows/columns with >= 50% missing values (threshold based on original code)
     df = df.dropna(axis=0, thresh=(len(df.columns) // 2))
     df = df.dropna(axis=1, thresh=(len(df.columns) // 2))
 
-    # Fill missing values
+    # Fill missing values by type
     for column in df.columns:
         columnType = df[column].dtype.kind
-        #if columnType in 'if':
-            # df[column] = df[column].fillna(df[column].mean())
         if columnType == 'O':
             df[column] = df[column].fillna('unknown')
+        elif columnType in ['i', 'u', 'f']:
+            # numeric types: fill with column mean if possible
+            try:
+                meanVal = df[column].mean()
+                df[column] = df[column].fillna(meanVal)
+            except Exception:
+                df[column] = df[column].fillna(0)
         elif columnType == 'M':
             df[column] = df[column].fillna(pd.Timestamp("1900-01-01"))
 
-    # Cleaning strings (removing special characters, making lowercase)
-    for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
-            if pd.api.types.is_string_dtype(df[column]):
-                df[column] = df[column].str.replace(r'[^\w\s]', '', regex=True)
-                df[column] = df[column].str.lower()
+    # Clean string columns: remove special characters, lowercase
+    for column in df.select_dtypes(include="object").columns:
+        if pd.api.types.is_string_dtype(df[column]):
+            df[column] = df[column].str.replace(r'[^\w\s]', '', regex=True)
+            df[column] = df[column].str.lower()
 
     return df
 
-# Functions to display various aspects of the dataframe
-# Displays data for different dates
 def displayDates(df):
     numericColumns = df.select_dtypes(include='number').columns
+    output = {}
     if 'date' in df.columns:
-        print(df.groupby(['date'])[numericColumns].mean().head())
-    elif 'date1' in df.columns:
-        print(df.groupby(['date1'])[numericColumns].mean().head())
-        if 'date_columns' in df.attrs:
-            for column in df.attrs['date_columns']:
-                print(df.groupby([column])[numericColumns].mean().head())
-    else:
-        print("This dataset does not contain any date columns\n")
+        output['date'] = df.groupby(['date'])[numericColumns].mean().head()
+    if 'date1' in df.columns:
+        output['date1'] = df.groupby(['date1'])[numericColumns].mean().head()
+    if 'date_columns' in df.attrs:
+        for column in df.attrs['date_columns']:
+            output[column] = df.groupby([column])[numericColumns].mean().head()
+    if not output:
+        return None
+    return output
 
 def displayUniques(df):
+    uniques = {}
     for column in df.columns:
-        print(f"Unique Values for {column}:")
-        print(df[column].unique())
+        uniques[column] = df[column].unique()
+    return uniques
 
 def visualizeData(df):
-    numericColumns = df.select_dtypes(include=['number']).columns
-    categoricalColumns = df.select_dtypes(exclude=['number']).columns
+    # Note: In Streamlit we will call visual functions directly in UI.
+    # This helper returns list of numeric columns and categorical columns
+    numericColumns = df.select_dtypes(include=['number']).columns.tolist()
+    categoricalColumns = df.select_dtypes(exclude=['number']).columns.tolist()
+    return numericColumns, categoricalColumns
 
-    # Histograms & Boxplots
-    for column in numericColumns:
-        plt.figure(figsize=(10, 4))
-
-        # Histogram
-        plt.subplot(1, 2, 1)
-        plt.hist(df[column].dropna(), color='skyblue', edgecolor='black')
-        plt.title(f'Histogram of {column}')
-        plt.xlabel(column)
-        plt.ylabel('Count')
-
-        # Boxplot
-        plt.subplot(1, 2, 2)
-        plt.boxplot(df[column].dropna(), vert=False)
-        plt.title(f'Boxplot of {column}')
-        plt.xlabel(column)
-
-        plt.tight_layout()
-        plt.show()
-
-    # Bar charts
-    for col in categoricalColumns:
-        topValues = df[column].value_counts().head(10)
-        plt.figure(figsize=(8, 4))
-        plt.bar(topValues.index.astype(str), topValues.values, color='lightgreen', edgecolor='black')
-        plt.title(f'Bar Chart of {column}')
-        plt.xlabel(column)
-        plt.ylabel('Count')
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
-
-    # Correlation Heatmap (Numeric Only)
-    if len(numericColumns) > 1:
-        plt.figure(figsize=(10, 8))
-        correlation = df[numericColumns].corr()
-        sns.heatmap(correlation, annot=True, cmap='coolwarm')
-        plt.title('Correlation Heatmap')
-        plt.tight_layout()
-        plt.show()
-
-# Menu function to show either numerical or categorical statistics
 def showMathInfo(df):
-    def minMaxRow():
-        minVal = dfStats.at['min', col]
-        maxVal = dfStats.at['max', col]
-        minRow = df[df[col] == minVal]
-        maxRow = df[df[col] == maxVal]
-        if not minRow.empty:
-            print(f"\nMinimum Value, Located ({minVal}, {col}):")
-            print(minRow)
-        if not maxRow.empty:
-            print(f"\nMaximum Value, Located ({maxVal}, {col}):")
-            print(maxRow)
+    dfStats = df.describe(include=['number'])
+    return dfStats
 
-    loop = True
-    while loop:
-        viewNumStats = True
-        userChoice = input(
-        "\n1. Select Numeric Statistics"
-        "\n2. Show Categorical Statistics"
-        "\n3. Show Datatypes" 
-        "\n4. Show Unique Values per Column"
-        "\n5. Exit"
-        "\nInput: ")
-        if userChoice.isdigit():
-            userChoice = int(userChoice)
-            if userChoice == 1: # Show basic statistics 
-                dfStats = df.describe(include=['number']) # Numeric columns then object columns
-                while viewNumStats:
-                    print("\nNumeric Statistics Options:")
-                    userChoice = input(
-                    "\n1. Show number per column"
-                    "\n2. Show mean"
-                    "\n3. Show std"
-                    "\n4. Show min/max"
-                    "\n5. Show percentile"
-                    "\n6. Show all statistics"
-                    "\n7. Exit"
-                    "\nInput: ")
-                    if (userChoice.isdigit()):
-                        userChoice = int(userChoice)
-                        if userChoice == 1:
-                            print("\nCount Values:")
-                            print(dfStats.loc['count'])
-                        elif userChoice == 2:
-                            print("\nMean Values:")
-                            print(dfStats.loc['mean'])
-                        elif userChoice == 3:
-                            print("\nStandard Deviation Values:")
-                            print(dfStats.loc['std'])
-                        elif userChoice == 4:
-                            # print("\nMinimum Values:")
-                            # print(dfStats.loc['min'])
-                            # print("\nMaximum Values:")
-                            # print(dfStats.loc['max'])
-                            # Finds the object column associated with the min/max value
-                            # Also works with datetime columns
-
-                            # User selects which column to find min/max for by using its header name or number
-                            print(f"Current Columns: {list(df.select_dtypes(include=['number']).columns)}")
-                            userCol = input("Which column to find min/max rows for? (type 'all' to show for all numeric columns)\nInput:"
-                            "\nInput:")
-                            if (userCol.isdigit()):
-                                userCol = int(userCol)
-                                for col in df.select_dtypes(include=['number']).columns:
-                                    if col == userCol or df.columns.get_loc(col) == userCol:
-                                        minMaxRow()
-                            elif isinstance(userCol, str):
-                                userCol = userCol.strip().lower()
-                                for col in df.select_dtypes(include=['number']).columns:
-                                    if col == userCol:
-                                        minMaxRow()
-
-                            elif userCol == 'all':
-                                if ((df.select_dtypes(include=['datetime']).shape[1] > 0) or (df.select_dtypes(include=['object']).shape[1] > 0)):
-                                    for col in df.select_dtypes(include=['number']).columns:
-                                        minMaxRow()
-
-                        elif userChoice == 5:
-                            userPercent = input("What percentile to show? (0-100): ")
-                            if (userPercent.replace('.','',1).isdigit()): # Checks if a number is entered and allows for decimals
-                                userPercent = float(userPercent)
-                                userPercent = round(userPercent, 2)
-                                if 0 <= userPercent <= 100:
-                                    userPercent = userPercent / 100
-                                    dfPercent = df.quantile(userPercent, numeric_only=True)
-                                    print(f"\n{userPercent} Percentile Values:")
-                                    print(dfPercent)
-                                else:
-                                    print("Input only a number between 0-100")
-                        elif userChoice == 6:
-                            print("\nAll Statistics:")
-                            print(dfStats)
-                        elif userChoice == 7:
-                            viewNumStats = False
-                        else:
-                            print("Input only a number 1-10")
-            elif userChoice == 2: # Show categorical statistics
-                dfStats = df.describe(include=['object']) 
-                viewStats = True
-                while viewStats:
-                    print("\nCategorical Statistics Options:")
-                    userChoice = input(
-                    "\n1. Show number per column"
-                    "\n2. Show unique values"
-                    "\n3. Show top value"
-                    "\n4. Show frequency of top value"
-                    "\n5. Show all statistics"
-                    "\n6. Exit"
-                    "\nInput: ")
-                    if (userChoice.isdigit()):
-                        userChoice = int(userChoice)
-                        if userChoice == 1:
-                            print("\nCount Values:")
-                            print(dfStats.loc['count'])
-                        elif userChoice == 2:
-                            print("\nUnique Values:")
-                            print(dfStats.loc['unique'])
-                        elif userChoice == 3:
-                            print("\nTop Values:")
-                            print(dfStats.loc['top'])
-                        elif userChoice == 4:
-                            print("\nFrequency of Top Values:")
-                            print(dfStats.loc['freq'])
-                        elif userChoice == 5:
-                            print("\nAll Statistics:")
-                            print(dfStats)
-                        elif userChoice == 6:
-                            viewStats = False
-                        else:
-                            print("Input only a number 1-6")
-            elif userChoice == 3:
-                print(df.dtypes)
-            elif userChoice == 4:
-                print(df.nunique())
-            elif userChoice == 5:
-                loop = False
-            else:
-                print("Input only a number 1-5")
+def editData(df, action, **kwargs):
+    # action is a string indicating what user wants
+    # kwargs vary by action
+    dfLocal = df.copy()
+    if action == 'viewHead':
+        numShow = kwargs.get('numShow', 5)
+        return dfLocal.head(numShow)
+    elif action == 'renameColumn':
+        colToEdit = kwargs.get('colToEdit')
+        newColName = kwargs.get('newColName')
+        if colToEdit is None or newColName is None:
+            raise ValueError("renameColumn requires colToEdit and newColName")
+        dfLocal = dfLocal.rename(columns={colToEdit: newColName})
+        return dfLocal
+    elif action == 'deleteColumn':
+        colToDelete = kwargs.get('colToDelete')
+        if colToDelete in dfLocal.columns:
+            dfLocal = dfLocal.drop(columns=[colToDelete])
+            return dfLocal
         else:
-            print("Input only a number 1-5")
-
-# Menu function to edit and view the dataframe
-def editData(df):
-    loop = True
-    while loop:
-        userChoice = input(
-        "\n1. View head of dataframe"
-        "\n2. Edit Column Names"
-        "\n3. Delete Column"
-        "\n4. Edit Datatypes"
-        "\n5. Exit"
-        "\nInput: ")
-        if userChoice.isdigit():
-            userChoice = int(userChoice)
-            if userChoice == 1:
-                numShow = input("How many rows to show from the top? (default 5): ")
-                if not numShow.isdigit():
-                    numShow = 5
-                else:
-                    numShow = int(numShow)
-                print(df.head(numShow))
-            elif userChoice == 2:
-                print(f"Current Columns: {list(df.columns)}")
-                colToEdit = input("Enter the exact column name to edit: ")
-                if (colToEdit.isdigit()):
-                    colToEdit = int(colToEdit)
-                if (colToEdit) in df.columns:
-                    newColName = input("Enter the new column name: ")
-                    df = df.rename(columns={colToEdit: newColName})
-                    print(f"Column '{colToEdit}' renamed to '{newColName}'")
-                else:
-                    print(f"Column '{colToEdit}' not found in dataframe.")
-            elif userChoice == 3:
-                colToDelete = input("Enter the exact column name to delete: ")
-                if colToDelete in df.columns:
-                    df = df.drop(columns=[colToDelete])
-                    print(f"Column '{colToDelete}' deleted from dataframe.")
-                else:
-                    print(f"Column '{colToDelete}' not found in dataframe.")
-            elif userChoice == 4:
-                print(f"Current Columns and Datatypes:\n{df.dtypes}")
-                colToChange = input("Enter the exact column name to change datatype: ")
-                if (colToChange.isdigit()):
-                    colToChange = int(colToChange)
-                if colToChange in df.columns:
-                    dtypeChoice = input("Select new datatype:"
-                          "\n1. Integer"
-                          "\n2. Float"
-                          "\n3. String"
-                          "\n4. Date"
-                          "\nInput: ")
-                    if dtypeChoice.isdigit():
-                        dtypeChoice = int(dtypeChoice)
-                        try:
-                            if dtypeChoice == 1:
-                                df[colToChange] = pd.to_numeric(df[colToChange], errors='coerce').astype('Int64')
-                            elif dtypeChoice == 2:
-                                df[colToChange] = pd.to_numeric(df[colToChange], errors='coerce').astype(float)
-                            elif dtypeChoice == 3:
-                                df[colToChange] = df[colToChange].astype(str)
-                            elif dtypeChoice == 4:
-                                timeChoice = input(
-                                    "\n1. Year"
-                                    "\n2. Month"
-                                    "\n3. Day"
-                                    "\n4. Hour:Minute:Second"
-                                )
-                                if timeChoice.isdigit():
-                                    timeChoice = int(timeChoice)
-                                    if timeChoice == 1:
-                                        df[colToChange] = pd.to_datetime(df[colToChange], format="%Y", errors='coerce')
-                                    elif timeChoice == 2:
-                                        df[colToChange] = pd.to_datetime(df[colToChange], format="%m/%Y", errors='coerce')
-                                    elif timeChoice == 3:
-                                        df[colToChange] = pd.to_datetime(df[colToChange], format="%m/%d/%Y", errors='coerce')
-                                    elif timeChoice == 4:
-                                        df[colToChange] = pd.to_datetime(df[colToChange], errors='coerce')
-                                    else:
-                                        print("Input only a number 1-4")
-                            else:
-                                print("Input only a number 1-4")
-                        except Exception as e:
-                            print(f"Error converting column: {e}")
-                    else:
-                        print("Input only a number 1-4")
-                else:
-                    print(f"Column '{colToChange}' not found in dataframe.")
-            elif userChoice == 5:
-                loop = False
+            raise KeyError(f"Column {colToDelete} not found")
+    elif action == 'changeDatatype':
+        colToChange = kwargs.get('colToChange')
+        dtypeChoice = kwargs.get('dtypeChoice')  # one of: 'int','float','string','date'
+        if colToChange not in dfLocal.columns:
+            raise KeyError(f"Column {colToChange} not found")
+        if dtypeChoice == 'int':
+            dfLocal[colToChange] = pd.to_numeric(dfLocal[colToChange], errors='coerce').astype('Int64')
+        elif dtypeChoice == 'float':
+            dfLocal[colToChange] = pd.to_numeric(dfLocal[colToChange], errors='coerce').astype(float)
+        elif dtypeChoice == 'string':
+            dfLocal[colToChange] = dfLocal[colToChange].astype(str)
+        elif dtypeChoice == 'date':
+            dfLocal[colToChange] = pd.to_datetime(dfLocal[colToChange], errors='coerce')
         else:
-            print("Input only a number 1-3")
-    return df
-
-def saveData(df):
-    userChoice = input(f"Do you want to save the dataframe to a new file (y), or overwrite the existing file (o)? (y/o/n): ")
-    if userChoice.lower() == 'y':
-        while True:
-            newFilename = input("Enter new filename (with .csv extension): ")
-            if not newFilename.endswith('.csv'):
-                print("Filename must end with .csv")
-            else:
-                break
-        df.to_csv(newFilename, index=False)
-        print(f"Dataframe saved to {newFilename}")
-    elif userChoice.lower() == 'o':
-        if 'filename' in df.attrs:
-            originalFilename = df.attrs['filename']
-            df.to_csv(originalFilename, index=False)
-            print(f"Dataframe overwritten to {originalFilename}")
-        else:
-            print("Original filename not found. Cannot overwrite.") 
+            raise ValueError("Unknown dtypeChoice")
+        return dfLocal
     else:
-        print("Dataframe not saved.")
+        raise ValueError("Unknown action")
 
-if __name__ == "__main__":
-    main()
+def saveData(df, saveChoice, newFilename=None, originalFilename=None):
+    # saveChoice: 'new', 'overwrite', or 'none'
+    if saveChoice == 'new':
+        if newFilename is None:
+            raise ValueError("newFilename required for saveChoice 'new'")
+        df.to_csv(newFilename, index=False)
+        return f"Dataframe saved to {newFilename}"
+    elif saveChoice == 'overwrite':
+        if originalFilename is None:
+            raise ValueError("originalFilename required for overwrite")
+        df.to_csv(originalFilename, index=False)
+        return f"Dataframe overwritten to {originalFilename}"
+    else:
+        return "Dataframe not saved"
+
+# -----------------------
+# Streamlit UI and mapping all functions
+# -----------------------
+
+st.set_page_config(page_title="DataReader Web", layout="wide")
+st.title("DataReader Web App")
+st.write("Web port of DataReader.py")
+
+# File uploader
+uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT", type=["csv", "xlsx", "txt"])
+
+# Option: let user specify header detection or apply auto-detection
+useHeaderDetection = st.checkbox("Auto detect header (try to infer)", value=True)
+
+if uploadedFile is not None:
+    # read file
+    try:
+        if uploadedFile.name.lower().endswith(".csv") or uploadedFile.name.lower().endswith(".txt"):
+            # attempt to read with pandas' sniffing, fallback to simple read
+            try:
+                dfRaw = pd.read_csv(uploadedFile, header=None, sep=None, engine='python')
+            except Exception:
+                uploadedFile.seek(0)
+                dfRaw = pd.read_csv(uploadedFile)
+        elif uploadedFile.name.lower().endswith((".xls", ".xlsx")):
+            dfRaw = pd.read_excel(uploadedFile, header=None)
+        else:
+            st.error("Unsupported file type")
+            st.stop()
+    except Exception as e:
+        st.error(f"Error reading file: {e}")
+        st.stop()
+
+    # store original filename
+    dfRaw.attrs['filename'] = uploadedFile.name
+
+    # header detection logic
+    headerExists = False
+    if useHeaderDetection:
+        try:
+            headerExists = checkHeader(dfRaw)
+        except Exception:
+            headerExists = False
+
+    # Offer user choice to override
+    headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
+    if headerOverride == "Auto detect":
+        headerExistsFinal = headerExists
+    else:
+        headerExistsFinal = True if headerOverride == "Yes" else False
+
+    # If header exists, convert first row into header
+    if headerExistsFinal:
+        # promote first row to header
+        df = dfRaw.copy()
+        newHeader = df.iloc[0].astype(str).tolist()
+        df = df[1:].reset_index(drop=True)
+        df.columns = newHeader
+    else:
+        df = dfRaw.copy()
+        # create default column names
+        df.columns = [f"col_{i}" for i in range(len(df.columns))]
+
+    # keep a working copy
+    if 'workingDf' not in st.session_state:
+        st.session_state.workingDf = df.copy()
+    else:
+        # if uploaded new file, replace working df
+        st.session_state.workingDf = df.copy()
+
+    st.sidebar.subheader("Main Menu")
+    mainMenu = st.sidebar.selectbox(
+        "Select operation",
+        [
+            "Numeric Statistics",
+            "Categorical Statistics",
+            "Datatypes",
+            "Unique Values per Column",
+            "Display Dates",
+            "Display Uniques",
+            "Clean Data",
+            "Edit Dataframe",
+            "Visualize Data",
+            "Save / Export"
+        ]
+    )
+
+    workingDf = st.session_state.workingDf
+
+    # Preview
+    with st.expander("Preview data (first 10 rows)"):
+        st.dataframe(workingDf.head(10))
+
+    # ---------- Numeric Statistics ----------
+    if mainMenu == "Numeric Statistics":
+        st.subheader("Numeric Statistics")
+        dfStats = showMathInfo(workingDf)
+
+        statOption = st.radio(
+            "Choose a numeric statistic to view",
+            ["Count per column", "Mean", "Std", "Min/Max rows", "Percentile", "All statistics"]
+        )
+
+        if statOption == "Count per column":
+            st.write(dfStats.loc['count'])
+
+        elif statOption == "Mean":
+            st.write(dfStats.loc['mean'])
+
+        elif statOption == "Std":
+            st.write(dfStats.loc['std'])
+
+        elif statOption == "Min/Max rows":
+            numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
+            if not numericCols:
+                st.info("No numeric columns available")
+            else:
+                colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
+                def minMaxRow(column):
+                    minVal = dfStats.at['min', column]
+                    maxVal = dfStats.at['max', column]
+                    minRow = workingDf[workingDf[column] == minVal]
+                    maxRow = workingDf[workingDf[column] == maxVal]
+                    st.write(f"Column: {column}")
+                    if not minRow.empty:
+                        st.write("Min row(s):")
+                        st.dataframe(minRow)
+                    else:
+                        st.write("No min row found")
+                    if not maxRow.empty:
+                        st.write("Max row(s):")
+                        st.dataframe(maxRow)
+                    else:
+                        st.write("No max row found")
+                if colChoice == "All":
+                    for col in numericCols:
+                        minMaxRow(col)
+                else:
+                    minMaxRow(colChoice)
+
+        elif statOption == "Percentile":
+            userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
+            if st.button("Show Percentile"):
+                percent = round(userPercent / 100.0, 4)
+                dfPercent = workingDf.quantile(percent, numeric_only=True)
+                st.write(f"{userPercent}% percentile values")
+                st.dataframe(dfPercent)
+
+        elif statOption == "All statistics":
+            st.dataframe(dfStats)
+
+    # ---------- Categorical Statistics ----------
+    elif mainMenu == "Categorical Statistics":
+        st.subheader("Categorical Statistics")
+        catStats = workingDf.describe(include=['object'])
+        st.dataframe(catStats)
+
+    # ---------- Datatypes ----------
+    elif mainMenu == "Datatypes":
+        st.subheader("Column datatypes")
+        st.write(workingDf.dtypes)
+
+    # ---------- Unique Values per Column ----------
+    elif mainMenu == "Unique Values per Column":
+        st.subheader("Unique counts per column")
+        st.write(workingDf.nunique())
+
+    # ---------- Display Dates ----------
+    elif mainMenu == "Display Dates":
+        st.subheader("Display date-grouped numeric means")
+        dateOutputs = displayDates(workingDf)
+        if not dateOutputs:
+            st.info("No date columns found")
+        else:
+            for k, v in dateOutputs.items():
+                st.write(f"Group by {k}")
+                st.dataframe(v)
+
+    # ---------- Display Uniques ----------
+    elif mainMenu == "Display Uniques":
+        st.subheader("Unique values per column")
+        uniques = displayUniques(workingDf)
+        for col, vals in uniques.items():
+            st.write(f"{col} ({len(vals)} unique)")
+            st.write(vals)
+
+    # ---------- Clean Data ----------
+    elif mainMenu == "Clean Data":
+        st.subheader("Clean data options")
+        st.write("Use these actions to clean the working dataframe. Changes are applied to the working copy.")
+        if st.button("Run automatic clean (convert types, fill placeholders, drop sparse rows/cols)"):
+            workingDf = cleanData(workingDf)
+            st.session_state.workingDf = workingDf
+            st.success("Clean complete")
+            st.dataframe(workingDf.head())
+
+        if st.button("Reset working dataframe to original upload"):
+            st.session_state.workingDf = df.copy()
+            workingDf = st.session_state.workingDf
+            st.success("Reset complete")
+            st.dataframe(workingDf.head())
+
+    # ---------- Edit Dataframe ----------
+    elif mainMenu == "Edit Dataframe":
+        st.subheader("Edit dataframe")
+        editAction = st.selectbox("Choose edit action", ["View head", "Rename column", "Delete column", "Change datatype", "Drop duplicates", "Sort by column"])
+        if editAction == "View head":
+            numShow = st.number_input("Rows to show", min_value=1, max_value=1000, value=5)
+            st.dataframe(editData(workingDf, 'viewHead', numShow=numShow))
+
+        elif editAction == "Rename column":
+            colToEdit = st.selectbox("Select column to rename", workingDf.columns.tolist())
+            newColName = st.text_input("New column name")
+            if st.button("Rename column"):
+                try:
+                    workingDf = editData(workingDf, 'renameColumn', colToEdit=colToEdit, newColName=newColName)
+                    st.session_state.workingDf = workingDf
+                    st.success(f"Renamed {colToEdit} to {newColName}")
+                except Exception as e:
+                    st.error(str(e))
+
+        elif editAction == "Delete column":
+            colToDelete = st.selectbox("Select column to delete", workingDf.columns.tolist())
+            if st.button("Delete column"):
+                try:
+                    workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
+                    st.session_state.workingDf = workingDf
+                    st.success(f"Deleted column {colToDelete}")
+                except Exception as e:
+                    st.error(str(e))
+
+        elif editAction == "Change datatype":
+            colToChange = st.selectbox("Select column to change datatype", workingDf.columns.tolist())
+            dtypeChoice = st.selectbox("Target datatype", ["int", "float", "string", "date"])
+            if st.button("Change datatype"):
+                try:
+                    workingDf = editData(workingDf, 'changeDatatype', colToChange=colToChange, dtypeChoice=dtypeChoice)
+                    st.session_state.workingDf = workingDf
+                    st.success(f"Converted {colToChange} to {dtypeChoice}")
+                except Exception as e:
+                    st.error(str(e))
+
+        elif editAction == "Drop duplicates":
+            subsetCols = st.multiselect("Subset columns for duplicate detection (empty = all columns)", workingDf.columns.tolist())
+            keepOption = st.selectbox("Keep which", ["first", "last", "none"])
+            if st.button("Drop duplicates"):
+                before = len(workingDf)
+                if subsetCols:
+                    if keepOption == "none":
+                        workingDf = workingDf.drop_duplicates(subset=subsetCols, keep=False)
+                    else:
+                        workingDf = workingDf.drop_duplicates(subset=subsetCols, keep=keepOption)
+                else:
+                    if keepOption == "none":
+                        workingDf = workingDf.drop_duplicates(keep=False)
+                    else:
+                        workingDf = workingDf.drop_duplicates(keep=keepOption)
+                st.session_state.workingDf = workingDf
+                after = len(workingDf)
+                st.success(f"Dropped duplicates, rows before: {before}, rows after: {after}")
+
+        elif editAction == "Sort by column":
+            sortCol = st.selectbox("Select column to sort by", workingDf.columns.tolist())
+            ascending = st.checkbox("Sort ascending", value=True)
+            if st.button("Sort"):
+                workingDf = workingDf.sort_values(by=sortCol, ascending=ascending).reset_index(drop=True)
+                st.session_state.workingDf = workingDf
+                st.success(f"Sorted by {sortCol} {'ascending' if ascending else 'descending'}")
+                st.dataframe(workingDf.head())
+
+    # ---------- Visualize Data ----------
+    elif mainMenu == "Visualize Data":
+        st.subheader("Visualize data")
+        numericCols, categoricalCols = visualizeData(workingDf)
+        vizType = st.selectbox("Choose visualization", ["Histogram", "Boxplot", "Scatter", "Bar (categorical)", "Correlation heatmap"])
+        if vizType == "Histogram":
+            if not numericCols:
+                st.info("No numeric columns available")
+            else:
+                colChoice = st.selectbox("Select numeric column", numericCols)
+                bins = st.slider("Bins", min_value=5, max_value=200, value=20)
+                fig, ax = plt.subplots()
+                ax.hist(workingDf[colChoice].dropna(), bins=bins)
+                ax.set_title(f"Histogram of {colChoice}")
+                st.pyplot(fig)
+
+        elif vizType == "Boxplot":
+            if not numericCols:
+                st.info("No numeric columns available")
+            else:
+                colChoice = st.selectbox("Select numeric column", numericCols)
+                fig, ax = plt.subplots()
+                ax.boxplot(workingDf[colChoice].dropna())
+                ax.set_title(f"Boxplot of {colChoice}")
+                st.pyplot(fig)
+
+        elif vizType == "Scatter":
+            if len(numericCols) < 2:
+                st.info("Need at least two numeric columns for scatter plot")
+            else:
+                xCol = st.selectbox("X axis", numericCols)
+                yCol = st.selectbox("Y axis", [c for c in numericCols if c != xCol])
+                fig, ax = plt.subplots()
+                ax.scatter(workingDf[xCol], workingDf[yCol])
+                ax.set_xlabel(xCol)
+                ax.set_ylabel(yCol)
+                ax.set_title(f"Scatter: {xCol} vs {yCol}")
+                st.pyplot(fig)
+
+        elif vizType == "Bar (categorical)":
+            if not categoricalCols:
+                st.info("No categorical columns")
+            else:
+                colChoice = st.selectbox("Select categorical column", categoricalCols)
+                counts = workingDf[colChoice].value_counts().head(50)
+                fig, ax = plt.subplots(figsize=(8, 4))
+                sns.barplot(x=counts.values, y=counts.index, ax=ax)
+                ax.set_xlabel("Count")
+                ax.set_ylabel(colChoice)
+                st.pyplot(fig)
+
+        elif vizType == "Correlation heatmap":
+            if len(numericCols) < 2:
+                st.info("Need at least two numeric columns")
+            else:
+                corr = workingDf[numericCols].corr()
+                fig, ax = plt.subplots(figsize=(10, 8))
+                sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
+                st.pyplot(fig)
+
+    # ---------- Save / Export ----------
+    elif mainMenu == "Save / Export":
+        st.subheader("Save or export working dataframe")
+        saveChoice = st.radio("Save options", ["Download CSV (local)", "Save as new file on server (if permitted)", "Overwrite original file (if allowed)"])
+        if saveChoice == "Download CSV (local)":
+            csvBytes = workingDf.to_csv(index=False).encode('utf-8')
+            st.download_button("Download CSV", csvBytes, file_name="processed_data.csv", mime="text/csv")
+        elif saveChoice == "Save as new file on server (if permitted)":
+            newFilename = st.text_input("Enter new filename (end with .csv)")
+            if st.button("Save to server"):
+                if not newFilename.endswith('.csv'):
+                    st.error("Filename must end with .csv")
+                else:
+                    workingDf.to_csv(newFilename, index=False)
+                    st.success(f"Saved to {newFilename}")
+        elif saveChoice == "Overwrite original file (if allowed)":
+            if 'filename' in df.attrs:
+                if st.button("Overwrite original upload"):
+                    originalFilename = df.attrs.get('filename')
+                    try:
+                        workingDf.to_csv(originalFilename, index=False)
+                        st.success(f"Overwrote {originalFilename}")
+                    except Exception as e:
+                        st.error(f"Could not overwrite: {e}")
+
+    # Update session state workingDf
+    st.session_state.workingDf = workingDf
