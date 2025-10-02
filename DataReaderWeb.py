@@ -289,12 +289,12 @@ if uploadedFile is not None:
     st.write("Preview of cleaned data:")
     st.dataframe(df.head())
 
-    # Offer user choice to override
-    headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
-    if headerOverride == "Auto detect":
-        headerExistsFinal = headerExists
-    else:
-        headerExistsFinal = True if headerOverride == "Yes" else False
+    # # Offer user choice to override
+    # headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
+    # if headerOverride == "Auto detect":
+    #     headerExistsFinal = headerExists
+    # else:
+    #     headerExistsFinal = True if headerOverride == "Yes" else False
 
     # If header exists, convert first row into header
     if headerExistsFinal:
