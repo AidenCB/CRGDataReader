@@ -101,22 +101,16 @@ def getDateTime(copyDf):
 def cleanData(mainDf):
     df = mainDf.copy()
 
-    for col in df.columns:
-        # Try to convert numeric columns
-        if df[col].dtype == object:
-            # First, check if it's really numeric
-            if df[col].str.replace('.', '', 1).str.isdigit().all():
-                df[col] = pd.to_numeric(df[col], errors='coerce')
+    # Let user choose which columns are dates
+    objectCols = df.select_dtypes(include=['object']).columns.tolist()
+    if objectCols:
+        dateCols = st.multiselect(
+            "Select which columns should be read as dates:",
+            options=objectCols
+        )
+        for col in dateCols:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
 
-            # Then, check if it's really a date (not just any string)
-            else:
-                try:
-                    converted = pd.to_datetime(df[col], errors='raise', infer_datetime_format=True)
-                    # Only keep if most values converted successfully
-                    if converted.notna().mean() > 0.9:
-                        df[col] = converted
-                except Exception:
-                    pass
     numericColumns = df.select_dtypes(include=['number']).columns
 
     # Convert strings to dates
@@ -129,8 +123,8 @@ def cleanData(mainDf):
             df[col] = df[col].replace(to_replace=pch, value=np.nan)
 
     # Drop rows/columns with >= 75% missing values 
-    df = df.dropna(axis=0, thresh=(len(df.columns) // 5))
-    df = df.dropna(axis=1, thresh=(len(df.columns) // 5))
+    df = df.dropna(axis=0, thresh=(len(df.columns) * .2))
+    df = df.dropna(axis=1, thresh=(len(df.columns) * .2))
 
     # Fill missing values by type
     for column in df.columns:
