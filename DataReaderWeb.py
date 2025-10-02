@@ -491,19 +491,21 @@ if uploadedFile is not None:
                     workingDf = editData(workingDf, 'renameColumn', colToEdit=colToEdit, newColName=newColName)
                     st.session_state.workingDf = workingDf
                     st.success(f"Renamed {colToEdit} to {newColName}")
+                    st.dataframe(workingDf.head())
                 except Exception as e:
                     st.error(str(e))
 
         elif editAction == "Delete column":
             colToDelete = st.selectbox("Select column to delete", workingDf.columns.tolist())
             if st.button("Delete column"):
-                try:
-                    workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
-                    st.session_state.workingDf = workingDf
-                    st.success(f"Deleted column {colToDelete}")
-                    st.dataframe(workingDf.head())
-                except Exception as e:
-                    st.error(str(e))
+                if (st.button("Confirm delete")):
+                    try:
+                        workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
+                        st.session_state.workingDf = workingDf
+                        st.success(f"Deleted column {colToDelete}")
+                        st.dataframe(workingDf.head())
+                    except Exception as e:
+                        st.error(str(e))
 
         elif editAction == "Drop duplicates":
             subsetCols = st.multiselect("Subset columns for duplicate detection (empty = all columns)", workingDf.columns.tolist())
