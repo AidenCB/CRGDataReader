@@ -121,7 +121,7 @@ def cleanData(mainDf):
             converted = pd.to_numeric(df[column], errors='coerce')
             # Does NOT have NaN, convert to numeric
             nanCount = converted.isna().sum()
-            if not (nanCount == len(df) or nanCount > (len(df) * 0.8)):
+            if not (nanCount == len(df) or nanCount > (len(df) * 0.7)):
                 df[column] = converted 
 
 
