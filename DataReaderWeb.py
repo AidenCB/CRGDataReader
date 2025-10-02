@@ -278,6 +278,13 @@ st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
 dfRaw = None
 
+# Reset / Clear session button
+if st.button("Reset Data"):
+    for key in ["lastFilename", "dfRaw", "workingDf"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.success("Session state cleared. Upload a new file to start again.")
+
 if uploadedFile is not None:
     # Always reload on new file
     if 'lastFilename' not in st.session_state or st.session_state.lastFilename != uploadedFile.name:
