@@ -117,7 +117,7 @@ def cleanData(mainDf):
     df = getDateTime(df)
 
     # Replace common placeholders with NaN
-    placeholders = [-999, 999, -9, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200, np.nan, None]
+    placeholders = [-999, 999, -9, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200, None]
     for col in df.columns:
         for pch in placeholders:
             df[col] = df[col].replace(to_replace=pch, value=np.nan)
