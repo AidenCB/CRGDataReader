@@ -99,23 +99,24 @@ def getDateTime(copyDf):
     return df
 
 def cleanData(mainDf):
-    df = mainDf.copy()
+    df = df.copy()
 
-    # Remove commas replaced with periods for numeric-like strings
-    for column in df.select_dtypes(include="object").columns:
-        df[column] = df[column].astype(str).str.replace(',', '.', regex=True)
+    for col in cleanedDf.columns:
+        # Try to convert numeric columns
+        if df[col].dtype == object:
+            # First, check if it's really numeric
+            if df[col].str.replace('.', '', 1).str.isdigit().all():
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
-    # If string seems to contain date separators, try datetime conversion
-    for column in df.select_dtypes(include="object").columns:
-        if df[column].astype(str).str.contains(r'[\/\-]').any():
-            df[column] = dateTimeColumn(df[column])
-
-    # Convert convertible strings to numeric
-    for column in df.columns:
-        converted = pd.to_numeric(df[column], errors='coerce')
-        if not converted.isna().all():
-            df[column] = converted
-
+            # Then, check if it's really a date (not just any string)
+            else:
+                try:
+                    converted = pd.to_datetime(df[col], errors='raise', infer_datetime_format=True)
+                    # Only keep if most values converted successfully
+                    if converted.notna().mean() > 0.9:
+                        df[col] = converted
+                except Exception:
+                    pass
     numericColumns = df.select_dtypes(include=['number']).columns
 
     # Convert strings to dates
