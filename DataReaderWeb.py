@@ -297,7 +297,7 @@ st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
 dfRaw = None
 
-if uploadedFile is not None:\
+if uploadedFile is not None:
     if 'workingDf' not in st.session_state:
         # Read file
         try:
