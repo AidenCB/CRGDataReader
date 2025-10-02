@@ -142,18 +142,32 @@ def cleanData(mainDf):
     return df
 
 def displayDates(df):
-    numericColumns = df.select_dtypes(include='datetime').columns
+    numericColumns = df.select_dtypes(include='number').columns
     output = {}
+    
+    dateCols = []
+    # Collect all date columns
     if 'date' in df.columns:
-        output['date'] = df.groupby(['date'])[numericColumns].mean().head()
+        dateCols.append('date')
     if 'date1' in df.columns:
-        output['date1'] = df.groupby(['date1'])[numericColumns].mean().head()
+        dateCols.append('date1')
     if 'date_columns' in df.attrs:
-        for column in df.attrs['date_columns']:
-            output[column] = df.groupby([column])[numericColumns].mean().head()
-    if not output:
+        dateCols.extend(df.attrs['date_columns'])
+    
+    if not dateCols:
         return None
+    
+    for col in dateCols:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            # Group by the full date
+            output[col] = df.groupby([col])[numericColumns].mean().head()
+            # Group by year
+            df['year_temp'] = df[col].dt.year
+            output[f"{col}_by_year"] = df.groupby(['year_temp'])[numericColumns].mean()
+            df.drop(columns=['year_temp'], inplace=True)
+    
     return output
+
 
 def displayUniques(df):
     uniques = {}
