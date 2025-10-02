@@ -296,17 +296,17 @@ if uploadedFile is not None:
     # else:
     #     headerExistsFinal = True if headerOverride == "Yes" else False
 
-    # If header exists, convert first row into header
-    if headerExistsFinal:
-        # promote first row to header
-        df = dfRaw.copy()
-        newHeader = df.iloc[0].astype(str).tolist()
-        df = df[1:].reset_index(drop=True)
-        df.columns = newHeader
-    else:
-        df = dfRaw.copy()
-        # create default column names
-        df.columns = [f"col_{i}" for i in range(len(df.columns))]
+    # # If header exists, convert first row into header
+    # if headerExistsFinal:
+    #     # promote first row to header
+    #     df = dfRaw.copy()
+    #     newHeader = df.iloc[0].astype(str).tolist()
+    #     df = df[1:].reset_index(drop=True)
+    #     df.columns = newHeader
+    # else:
+    #     df = dfRaw.copy()
+    #     # create default column names
+    #     df.columns = [f"col_{i}" for i in range(len(df.columns))]
 
     # keep a working copy
     if 'workingDf' not in st.session_state:
