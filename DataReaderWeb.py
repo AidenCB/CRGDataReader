@@ -101,7 +101,7 @@ def getDateTime(copyDf):
 def cleanData(mainDf):
     df = mainDf.copy()
 
-    for col in cleanedDf.columns:
+    for col in df.columns:
         # Try to convert numeric columns
         if df[col].dtype == object:
             # First, check if it's really numeric
