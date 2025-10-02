@@ -182,7 +182,13 @@ def visualizeData(df):
     return numericColumns, categoricalColumns
 
 def showMathInfo(df):
-    dfStats = df.describe(include=['number'])
+    numericCols = df.select_dtypes(include=['number'])
+    if numericCols.shape[1] == 0:
+        st.warning("No numeric columns found in the dataset.")
+        return None
+
+    dfStats = numericCols.describe()
+    st.write("Numeric Statistics", dfStats)
     return dfStats
 
 def editData(df, action, **kwargs):
@@ -394,8 +400,18 @@ if uploadedFile is not None:
     # ---------- Categorical Statistics ----------
     elif mainMenu == "Categorical Statistics":
         st.subheader("Categorical Statistics")
-        catStats = workingDf.describe(include=['object'])
+        catStats = showCategoricalInfo(workingDf)
         st.dataframe(catStats)
+        
+        def showCategoricalInfo(df):
+            catCols = df.select_dtypes(include=['object', 'category'])
+            if catCols.shape[1] == 0:
+                st.warning("No categorical columns found in the dataset.")
+                return None
+
+        st.write("Categorical Statistics")
+        st.write(catCols.describe())
+        return catCols.describe()
 
     # ---------- Datatypes ----------
     elif mainMenu == "Datatypes":
