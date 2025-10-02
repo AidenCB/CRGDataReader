@@ -271,21 +271,6 @@ if uploadedFile is not None:
     # store original filename
     dfRaw.attrs['filename'] = uploadedFile.name
 
-
-    # header detection logic
-    headerExists = False
-   
-    # Clean automatically
-    df = cleanData(dfRaw)
-    st.session_state.workingDf = df.copy()
-
-    # # Offer user choice to override
-    # headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
-    # if headerOverride == "Auto detect":
-    #     headerExistsFinal = headerExists
-    # else:
-    #     headerExistsFinal = True if headerOverride == "Yes" else False
-
     # If header exists, convert first row into header
     if checkHeader(dfRaw):
         # Convert first row values to lowercase if they are strings
@@ -302,6 +287,18 @@ if uploadedFile is not None:
     else:
         # create default column names
         df.columns = [f"col_{i}" for i in range(len(df.columns))]
+    
+    # Clean automatically
+    df = cleanData(dfRaw)
+    st.session_state.workingDf = df.copy()
+
+    # # Offer user choice to override
+    # headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
+    # if headerOverride == "Auto detect":
+    #     headerExistsFinal = headerExists
+    # else:
+    #     headerExistsFinal = True if headerOverride == "Yes" else False
+
 
     # keep a working copy
     if 'workingDf' not in st.session_state:
