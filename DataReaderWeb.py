@@ -341,61 +341,62 @@ if uploadedFile is not None:
 
     # ---------- Numeric Statistics ----------
     if mainMenu == "Numeric Statistics":
-        st.subheader("Numeric Statistics")
-        dfStats = showMathInfo(workingDf)
+        numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
+        if not numericCols:
+            st.info("No numeric columns available")
+        else:
+            st.subheader("Numeric Statistics")
+            dfStats = showMathInfo(workingDf)
 
-        statOption = st.radio(
-            "Choose a numeric statistic to view",
-            ["Count per column", "Mean", "Std", "Min/Max rows", "Percentile", "All statistics"]
-        )
+            statOption = st.radio(
+                "Choose a numeric statistic to view",
+                ["Count per column", "Mean", "Std", "Min/Max rows", "Percentile", "All statistics"]
+            )
 
-        if statOption == "Count per column":
-            st.write(dfStats.loc['count'])
+            if statOption == "Count per column":
+                st.write(dfStats.loc['count'])
 
-        elif statOption == "Mean":
-            st.write(dfStats.loc['mean'])
+            elif statOption == "Mean":
+                st.write(dfStats.loc['mean'])
 
-        elif statOption == "Std":
-            st.write(dfStats.loc['std'])
+            elif statOption == "Std":
+                st.write(dfStats.loc['std'])
 
-        elif statOption == "Min/Max rows":
-            numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
-            if not numericCols:
-                st.info("No numeric columns available")
-            else:
-                colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
-                def minMaxRow(column):
-                    minVal = dfStats.at['min', column]
-                    maxVal = dfStats.at['max', column]
-                    minRow = workingDf[workingDf[column] == minVal]
-                    maxRow = workingDf[workingDf[column] == maxVal]
-                    st.write(f"Column: {column}")
-                    if not minRow.empty:
-                        st.write("Min row(s):")
-                        st.dataframe(minRow)
-                    else:
-                        st.write("No min row found")
-                    if not maxRow.empty:
-                        st.write("Max row(s):")
-                        st.dataframe(maxRow)
-                    else:
-                        st.write("No max row found")
-                if colChoice == "All":
-                    for col in numericCols:
-                        minMaxRow(col)
+            elif statOption == "Min/Max rows":
                 else:
-                    minMaxRow(colChoice)
+                    colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
+                    def minMaxRow(column):
+                        minVal = dfStats.at['min', column]
+                        maxVal = dfStats.at['max', column]
+                        minRow = workingDf[workingDf[column] == minVal]
+                        maxRow = workingDf[workingDf[column] == maxVal]
+                        st.write(f"Column: {column}")
+                        if not minRow.empty:
+                            st.write("Min row(s):")
+                            st.dataframe(minRow)
+                        else:
+                            st.write("No min row found")
+                        if not maxRow.empty:
+                            st.write("Max row(s):")
+                            st.dataframe(maxRow)
+                        else:
+                            st.write("No max row found")
+                    if colChoice == "All":
+                        for col in numericCols:
+                            minMaxRow(col)
+                    else:
+                        minMaxRow(colChoice)
 
-        elif statOption == "Percentile":
-            userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
-            if st.button("Show Percentile"):
-                percent = round(userPercent / 100.0, 4)
-                dfPercent = workingDf.quantile(percent, numeric_only=True)
-                st.write(f"{userPercent}% percentile values")
-                st.dataframe(dfPercent)
+            elif statOption == "Percentile":
+                userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
+                if st.button("Show Percentile"):
+                    percent = round(userPercent / 100.0, 4)
+                    dfPercent = workingDf.quantile(percent, numeric_only=True)
+                    st.write(f"{userPercent}% percentile values")
+                    st.dataframe(dfPercent)
 
-        elif statOption == "All statistics":
-            st.dataframe(dfStats)
+            elif statOption == "All statistics":
+                st.dataframe(dfStats)
 
     # ---------- Categorical Statistics ----------
     elif mainMenu == "Categorical Statistics":
