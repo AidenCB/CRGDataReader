@@ -142,31 +142,30 @@ def cleanData(mainDf):
     return df
 
 def displayDates(df):
-    numericColumns = df.select_dtypes(include='number').columns
+    # Numeric columns to aggregate
+    numericColumns = df.select_dtypes(include=['number']).columns
     output = {}
-    
+
+    # Collect all datetime columns
     dateCols = []
-    # Collect all date columns
-    if 'date' in df.columns:
-        dateCols.append('date')
-    if 'date1' in df.columns:
-        dateCols.append('date1')
-    if 'date_columns' in df.attrs:
-        dateCols.extend(df.attrs['date_columns'])
+    for col in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df[col]):
+            dateCols.append(col)
     
     if not dateCols:
         return None
-    
+
     for col in dateCols:
-        if pd.api.types.is_datetime64_any_dtype(df[col]):
-            # Group by the full date
-            output[col] = df.groupby([col])[numericColumns].mean().head()
-            # Group by year
-            df['year_temp'] = df[col].dt.year
-            output[f"{col}_by_year"] = df.groupby(['year_temp'])[numericColumns].mean()
-            df.drop(columns=['year_temp'], inplace=True)
-    
+        # Group by exact date
+        output[col] = df.groupby(col)[numericColumns].mean().head()
+
+        # Group by year
+        df['year_temp'] = df[col].dt.year
+        output[f"{col}_by_year"] = df.groupby('year_temp')[numericColumns].mean()
+        df.drop(columns=['year_temp'], inplace=True)
+
     return output
+
 
 
 def displayUniques(df):
