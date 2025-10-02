@@ -81,13 +81,15 @@ def getDateTime(copyDf):
     df = copyDf.copy()
     dateColumns = []
 
-    for column in df.select_dtypes(include="object").columns:
-        original = df[column].copy()
-        converted = dateTimeColumn(df[column])
-
-        if not converted.equals(original):
-            df[column] = converted
-            dateColumns.append(column)
+    # Let user choose which columns are dates
+    objectCols = df.select_dtypes(include=['object']).columns.tolist()
+    if objectCols:
+        dateCols = st.multiselect(
+            "Select which columns should be read as dates:",
+            options=objectCols
+        )
+        for col in dateCols:
+            df[col] = pd.to_datetime(df[col], errors='coerce')
 
     # Rename date columns to match original behavior
     if len(dateColumns) == 1:
@@ -100,16 +102,6 @@ def getDateTime(copyDf):
 
 def cleanData(mainDf):
     df = mainDf.copy()
-
-    # Let user choose which columns are dates
-    objectCols = df.select_dtypes(include=['object']).columns.tolist()
-    if objectCols:
-        dateCols = st.multiselect(
-            "Select which columns should be read as dates:",
-            options=objectCols
-        )
-        for col in dateCols:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
 
     numericColumns = df.select_dtypes(include=['number']).columns
 
