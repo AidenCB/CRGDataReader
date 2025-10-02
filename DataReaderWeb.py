@@ -296,7 +296,7 @@ if uploadedFile is not None:
             if checkHeader(dfRaw):
                 # Convert first row values to lowercase if they are strings
                 fixedCol = []
-                for val in df.iloc[0]:
+                for val in dfRaw.iloc[0]:
                     if isinstance(val, str):
                         fixedCol.append(val.strip().lower())
                     else:
