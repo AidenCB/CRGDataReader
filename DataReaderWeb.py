@@ -126,20 +126,20 @@ def cleanData(mainDf):
     df = df.dropna(axis=0, thresh=(len(df.columns) * .2))
     df = df.dropna(axis=1, thresh=(len(df.columns) * .2))
 
-    # Fill missing values by type
-    for column in df.columns:
-        columnType = df[column].dtype.kind
-        if columnType == 'O':
-            df[column] = df[column].fillna('unknown')
-        elif columnType in ['i', 'u', 'f']:
-            # numeric types: fill with column mean if possible
-            try:
-                meanVal = df[column].mean()
-                df[column] = df[column].fillna(meanVal)
-            except Exception:
-                df[column] = df[column].fillna(0)
-        elif columnType == 'M':
-            df[column] = df[column].fillna(pd.Timestamp("1900-01-01"))
+    # # Fill missing values by type
+    # for column in df.columns:
+    #     columnType = df[column].dtype.kind
+    #     if columnType == 'O':
+    #         df[column] = df[column].fillna('unknown')
+    #     elif columnType in ['i', 'u', 'f']:
+    #         # numeric types: fill with column mean if possible
+    #         try:
+    #             meanVal = df[column].mean()
+    #             df[column] = df[column].fillna(meanVal)
+    #         except Exception:
+    #             df[column] = df[column].fillna(0)
+    #     elif columnType == 'M':
+    #         df[column] = df[column].fillna(pd.Timestamp("1900-01-01"))
 
     # Clean string columns: remove special characters, lowercase
     for column in df.select_dtypes(include="object").columns:
@@ -456,7 +456,7 @@ if uploadedFile is not None:
 
         elif editAction == "Rename column":
             colToEdit = st.selectbox("Select column to rename", workingDf.columns.tolist())
-            newColName = st.text_input("New column name")
+            newColName = st.text_input("New column")
             if st.button("Rename column"):
                 try:
                     workingDf = editData(workingDf, 'renameColumn', colToEdit=colToEdit, newColName=newColName)
