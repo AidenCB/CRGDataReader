@@ -191,6 +191,15 @@ def showMathInfo(df):
     dfStats = numericCols.describe()
     return dfStats
 
+        
+def showCategoricalInfo(df):
+    catCols = df.select_dtypes(include=['object', 'category'])
+    if catCols.shape[1] == 0:
+        st.warning("No categorical columns found in the dataset.")
+        return None
+
+    return catCols.describe()
+
 def editData(df, action, **kwargs):
     # action is a string indicating what user wants
     # kwargs vary by action
@@ -400,14 +409,7 @@ if uploadedFile is not None:
         st.subheader("Categorical Statistics")
         catStats = showCategoricalInfo(workingDf)
         st.dataframe(catStats)
-        
-        def showCategoricalInfo(df):
-            catCols = df.select_dtypes(include=['object', 'category'])
-            if catCols.shape[1] == 0:
-                st.warning("No categorical columns found in the dataset.")
-                return None
 
-            return catCols.describe()
 
     # ---------- Datatypes ----------
     elif mainMenu == "Datatypes":
