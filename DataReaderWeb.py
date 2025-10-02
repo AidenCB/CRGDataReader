@@ -189,7 +189,6 @@ def showMathInfo(df):
         return None
 
     dfStats = numericCols.describe()
-    st.write("Numeric Statistics", dfStats)
     return dfStats
 
 def editData(df, action, **kwargs):
@@ -310,10 +309,10 @@ if uploadedFile is not None:
 
     # keep a working copy
     if 'workingDf' not in st.session_state:
-        st.session_state.workingDf = df.copy()
+        st.session_state.workingDf = dfRaw.copy()
     else:
         # if uploaded new file, replace working df
-        st.session_state.workingDf = df.copy()
+        st.session_state.workingDf = dfRaw.copy()
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
@@ -408,8 +407,6 @@ if uploadedFile is not None:
                 st.warning("No categorical columns found in the dataset.")
                 return None
 
-            st.write("Categorical Statistics")
-            st.write(catCols.describe())
             return catCols.describe()
 
     # ---------- Datatypes ----------
