@@ -129,8 +129,8 @@ def cleanData(mainDf):
             df[col] = df[col].replace(to_replace=pch, value=np.nan)
 
     # Drop rows/columns with >= 75% missing values 
-    df = df.dropna(axis=0, thresh=(len(df.columns) // 3))
-    df = df.dropna(axis=1, thresh=(len(df.columns) // 3))
+    df = df.dropna(axis=0, thresh=(len(df.columns) // 5))
+    df = df.dropna(axis=1, thresh=(len(df.columns) // 5))
 
     # Fill missing values by type
     for column in df.columns:
