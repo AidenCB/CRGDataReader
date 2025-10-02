@@ -297,7 +297,7 @@ if uploadedFile is not None:
             st.session_state.dfRaw = dfRaw.copy()
 
                 # If header exists, convert first row into header
-            if checkHeader(df):
+            if checkHeader(dfRaw):
                 # Convert first row values to lowercase if they are strings
                 fixedCol = []
                 for val in df.iloc[0]:
