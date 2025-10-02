@@ -78,25 +78,37 @@ def dateTimeColumn(series):
     return s
 
 def getDateTime(copyDf):
+    """
+    Optimization: Simplified date column handling
+    """
     df = copyDf.copy()
     dateColumns = []
-
-    # Let user choose which columns are dates
+    
+    # Only show multiselect if there are object columns
     objectCols = df.select_dtypes(include=['object']).columns.tolist()
-    if objectCols:
+    if objectCols and 'dateCols' not in st.session_state:
+        # Store user selection in session state to avoid re-asking
         dateCols = st.multiselect(
             "Select which columns should be read as dates:",
-            options=objectCols
+            options=objectCols,
+            key='date_column_selector'
         )
-        for col in dateCols:
-            df[col] = pd.to_datetime(df[col], errors='coerce')
-
-    # Rename date columns to match original behavior
+        if dateCols:
+            st.session_state.dateCols = dateCols
+    
+    # Use stored selection if available
+    if 'dateCols' in st.session_state:
+        for col in st.session_state.dateCols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                dateColumns.append(col)
+    
+    # Rename date columns
     if len(dateColumns) == 1:
         df = df.rename(columns={dateColumns[0]: 'date'})
     elif len(dateColumns) > 1:
         df = df.rename(columns={dateColumns[0]: 'date1'})
-
+    
     df.attrs['date_columns'] = dateColumns
     return df
 
@@ -106,11 +118,8 @@ def cleanData(mainDf):
 
     # Remove commas from numbers and replacing with periods
     for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
-        df[column] = df[column].str.replace(',', '.', regex=True)
-
-    # Check if strings contain "date" characters
-    for column in df.select_dtypes(include="object").columns: 
-    # Check for "/", "-" 
+        df[column] = df[column].str.replace(',', '.', regex=True) 
+        # Check for "/", "-" 
         if df[column].str.contains(r'[\/\-]').any():
             df[column] = dateTimeColumn(df[column])
 
@@ -137,21 +146,6 @@ def cleanData(mainDf):
     df = df.dropna(axis=0, thresh=(len(df.columns) * .2))
     df = df.dropna(axis=1, thresh=(len(df.columns) * .2))
 
-    # # Fill missing values by type
-    # for column in df.columns:
-    #     columnType = df[column].dtype.kind
-    #     if columnType == 'O':
-    #         df[column] = df[column].fillna('unknown')
-    #     elif columnType in ['i', 'u', 'f']:
-    #         # numeric types: fill with column mean if possible
-    #         try:
-    #             meanVal = df[column].mean()
-    #             df[column] = df[column].fillna(meanVal)
-    #         except Exception:
-    #             df[column] = df[column].fillna(0)
-    #     elif columnType == 'M':
-    #         df[column] = df[column].fillna(pd.Timestamp("1900-01-01"))
-
     # Clean string columns: remove special characters, lowercase
     for column in df.select_dtypes(include="object").columns:
         if pd.api.types.is_string_dtype(df[column]):
@@ -166,10 +160,7 @@ def displayDates(df):
     output = {}
 
     # Collect all datetime columns
-    dateCols = []
-    for col in df.columns:
-        if pd.api.types.is_datetime64_any_dtype(df[col]):
-            dateCols.append(col)
+    dateCols = df.select_dtypes(include=['datetime64']).columns.tolist()
     
     if not dateCols:
         return None
@@ -237,19 +228,17 @@ def editData(df, action, **kwargs):
     elif action == 'changeDatatype':
         colToChange = kwargs.get('colToChange')
         dtypeChoice = kwargs.get('dtypeChoice')  # one of: 'int','float','string','date'
+        
         if colToChange not in dfLocal.columns:
             raise KeyError(f"Column {colToChange} not found")
-        if dtypeChoice == 'int':
-            dfLocal[colToChange] = pd.to_numeric(dfLocal[colToChange], errors='coerce').astype('Int64')
-        elif dtypeChoice == 'float':
-            dfLocal[colToChange] = pd.to_numeric(dfLocal[colToChange], errors='coerce').astype(float)
-        elif dtypeChoice == 'string':
-            dfLocal[colToChange] = dfLocal[colToChange].astype(str)
-            dfLocal[colToChange] = dfLocal[colToChange].replace("nan", pd.NA)
-        elif dtypeChoice == 'date':
-            dfLocal[colToChange] = pd.to_datetime(dfLocal[colToChange], errors='coerce')
-        else:
-            raise ValueError("Unknown dtypeChoice")
+
+        dtype_map = {
+            'int': lambda x: pd.to_numeric(x, errors='coerce').astype('Int64'),
+            'float': lambda x: pd.to_numeric(x, errors='coerce').astype(float),
+            'string': lambda x: x.astype(str),
+            'date': lambda x: pd.to_datetime(x, errors='coerce')
+        }
+        dfLocal[colToChange] = dtype_map[dtypeChoice](dfLocal[colToChange])
         return dfLocal
     elif action == "changeDate":
         colToEdit = kwargs.get('colToEdit')
