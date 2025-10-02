@@ -274,8 +274,6 @@ if uploadedFile is not None:
 
     # header detection logic
     headerExists = False
-    if checkHeader(dfRaw):
-        headerExists = checkHeader(dfRaw)
    
     # Clean automatically
     df = cleanData(dfRaw)
@@ -289,11 +287,18 @@ if uploadedFile is not None:
     #     headerExistsFinal = True if headerOverride == "Yes" else False
 
     # If header exists, convert first row into header
-    if headerExists:
-        # promote first row to header
-        newHeader = df.iloc[0].astype(str).str.lower().tolist()
-        df = df[1:].reset_index(drop=True)
-        df.columns = newHeader
+    if checkHeader(dfRaw):
+        # Convert first row values to lowercase if they are strings
+        fixedCol = []
+        for val in df.iloc[0]:
+            if isinstance(val, str):
+                fixedCol.append(val.strip().lower())
+            else:
+                fixedCol.append(val)
+
+        df.columns = fixedCol
+        df = df.drop(index=0)
+        df = df.reset_index(drop=True)  # Remove the old header row, reset index
     else:
         # create default column names
         df.columns = [f"col_{i}" for i in range(len(df.columns))]
