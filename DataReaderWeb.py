@@ -103,7 +103,26 @@ def getDateTime(copyDf):
 def cleanData(mainDf):
     df = mainDf.copy()
 
-    numericColumns = df.select_dtypes(include=['number']).columns
+
+    # Remove commas from numbers and replacing with periods
+    for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
+        df[column] = df[column].str.replace(',', '.', regex=True)
+
+    # Check if strings contain "date" characters
+    for column in df.select_dtypes(include="object").columns: 
+    # Check for "/", "-" 
+        if df[column].str.contains(r'[\/\-]').any():
+            df[column] = dateTimeColumn(df[column])
+
+    # Convert strings to numbers
+    # Do it FIRST because it might convert numbers to date incorrectly otherwise
+    for column in df.columns:
+        if df[column].dtype == 'object':
+            converted = pd.to_numeric(df[column], errors='coerce')
+            # Does NOT have NaN, convert to numeric
+            if not (converted.isna().all()):
+                df[column] = converted 
+
 
     # Convert strings to dates
     df = getDateTime(df)
