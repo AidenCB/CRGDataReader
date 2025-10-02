@@ -264,6 +264,8 @@ if uploadedFile is not None:
             df = pd.read_csv(uploadedFile)
         elif uploadedFile.name.endswith((".xlsx", ".xls")):
             df = pd.read_excel(uploadedFile)
+        else:
+            raise ValueError("Unsupported file type")
 
         # Clean automatically
         df = cleanData(df)
@@ -274,8 +276,7 @@ if uploadedFile is not None:
 
     except Exception as e:
         st.error(f"Error reading or cleaning file: {e}")
-        df = None
-        return 
+        df = None 
 
     # store original filename
     dfRaw.attrs['filename'] = uploadedFile.name
