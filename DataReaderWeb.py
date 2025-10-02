@@ -292,7 +292,7 @@ if uploadedFile is not None:
     if headerExists:
         # promote first row to header
         df = dfRaw.copy()
-        newHeader = df.iloc[0].astype(str).tolist()
+        newHeader = df.iloc[0].astype(str).str.lower().tolist()
         df = df[1:].reset_index(drop=True)
         df.columns = newHeader
     else:
