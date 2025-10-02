@@ -157,12 +157,7 @@ def displayDates(df):
 
     for col in dateCols:
         # Group by exact date
-        output[col] = df.groupby(col)[numericColumns].mean().head()
-
-        # Group by year
-        df['year_temp'] = df[col].dt.year
-        output[f"{col}_by_year"] = df.groupby('year_temp')[numericColumns].mean()
-        df.drop(columns=['year_temp'], inplace=True)
+        output[col] = df.groupby(col)[numericColumns].mean()
 
     return output
 
@@ -236,6 +231,34 @@ def editData(df, action, **kwargs):
         else:
             raise ValueError("Unknown dtypeChoice")
         return dfLocal
+    elif action == "changeDate":
+        colToEdit = kwargs.get('colToEdit')
+        components = kwargs.get('components', [])  # list of strings like ['year','month','day','hour','minute','second']
+
+        if colToEdit not in dfLocal.columns:
+            raise KeyError(f"Column {colToEdit} not found")
+
+        if not pd.api.types.is_datetime64_any_dtype(dfLocal[colToEdit]):
+            raise TypeError(f"Column {colToEdit} is not datetime type")
+
+        for comp in components:
+            if comp == 'year':
+                dfLocal[f"{colToEdit}_year"] = dfLocal[colToEdit].dt.year
+            elif comp == 'month':
+                dfLocal[f"{colToEdit}_month"] = dfLocal[colToEdit].dt.month
+            elif comp == 'day':
+                dfLocal[f"{colToEdit}_day"] = dfLocal[colToEdit].dt.day
+            elif comp == 'hour':
+                dfLocal[f"{colToEdit}_hour"] = dfLocal[colToEdit].dt.hour
+            elif comp == 'minute':
+                dfLocal[f"{colToEdit}_minute"] = dfLocal[colToEdit].dt.minute
+            elif comp == 'second':
+                dfLocal[f"{colToEdit}_second"] = dfLocal[colToEdit].dt.second
+            else:
+                raise ValueError(f"Unknown component {comp}")
+
+        return dfLocal
+
     else:
         raise ValueError("Unknown action")
 
@@ -513,8 +536,27 @@ if uploadedFile is not None:
                 st.session_state.workingDf = workingDf
                 st.success(f"Sorted by {sortCol} {'ascending' if ascending else 'descending'}")
                 st.dataframe(workingDf.head())
+        
+        elif editAction == "Change Date":
+            dateCols = [col for col in workingDf.columns if pd.api.types.is_datetime64_any_dtype(workingDf[col])]
+            if dateCols:
+                colToEdit = st.selectbox("Select datetime column", dateCols)
+                # Checkboxes for components
+                components = []
+                if st.checkbox("Year"): components.append('year')
+                if st.checkbox("Month"): components.append('month')
+                if st.checkbox("Day"): components.append('day')
+                if st.checkbox("Hour"): components.append('hour')
+                if st.checkbox("Minute"): components.append('minute')
+                if st.checkbox("Second"): components.append('second')
 
-    # ---------- Visualize Data ----------
+                if st.button("Apply"):
+                    workingDf = editData(workingDf, 'changeDate', colToEdit=colToEdit, components=components)
+                    st.session_state.workingDf = workingDf
+                    st.success("Datetime components extracted")
+                    st.dataframe(workingDf.head())
+
+            # ---------- Visualize Data ----------
     elif mainMenu == "Visualize Data":
         st.subheader("Visualize data")
         numericCols, categoricalCols = visualizeData(workingDf)
