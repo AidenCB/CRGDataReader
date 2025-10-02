@@ -78,9 +78,6 @@ def dateTimeColumn(series):
     return s
 
 def getDateTime(copyDf):
-    """
-    Optimization: Simplified date column handling
-    """
     df = copyDf.copy()
     dateColumns = []
     
@@ -330,14 +327,6 @@ if uploadedFile is not None:
             st.session_state.lastFilename = uploadedFile.name
             dfRaw.attrs['filename'] = uploadedFile.name
             st.session_state.dfRaw = dfRaw.copy()
-
-            # Header check & cleaning only once per new file
-            if checkHeader(dfRaw):
-                fixedCol = [val.strip().lower() if isinstance(val, str) else val for val in dfRaw.iloc[0]]
-                dfRaw.columns = fixedCol
-                dfRaw = dfRaw.drop(index=0).reset_index(drop=True)
-            else:
-                dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
 
             # Clean only once
             st.session_state.workingDf = cleanData(dfRaw)
