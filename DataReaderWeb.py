@@ -19,17 +19,6 @@ def checkHeader(mainDf):
 
     if (stringVals / totalVals) < 0.85:
         return False
-
-    if len(df) < 2:
-        return False
-
-    secondRowStrings = sum(isinstance(val, str) for val in df.iloc[1])
-
-    if (secondRowStrings / totalVals) < 0.5:
-        return True
-
-    if df.iloc[0].equals(df.iloc[1]):
-        return False
     else:
         return True
 
