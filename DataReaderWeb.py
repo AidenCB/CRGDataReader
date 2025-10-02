@@ -306,12 +306,12 @@ if uploadedFile is not None:
                     else:
                         fixedCol.append(val)
 
-                df.columns = fixedCol
-                df = df.drop(index=0)
-                df = df.reset_index(drop=True)  # Remove the old header row, reset index
+                dfRaw.columns = fixedCol
+                dfRaw = dfRaw.drop(index=0)
+                dfRaw = dfRaw.reset_index(drop=True)  # Remove the old header row, reset index
             else:
                 # create default column names
-                df.columns = [f"col_{i}" for i in range(len(df.columns))]
+                dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
 
             # Clean only once
             st.session_state.workingDf = cleanData(dfRaw)
@@ -320,8 +320,8 @@ if uploadedFile is not None:
             st.error(f"Error reading file: {e}")
             st.session_state.workingDf = None
 
-    # Always work with session copy
-    workingDf = st.session_state.get("workingDf")
+# Always work with session copy
+workingDf = st.session_state.get("workingDf")
 
 
     st.sidebar.subheader("Main Menu")
