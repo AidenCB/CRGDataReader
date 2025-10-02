@@ -257,18 +257,19 @@ st.write("Web port of DataReader.py")
 
 # File uploader
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
+dfRaw = None
 
 if uploadedFile is not None:
     try:
         if uploadedFile.name.endswith((".csv", ".txt")):
-            df = pd.read_csv(uploadedFile)
+            dfRaw = pd.read_csv(uploadedFile)
         elif uploadedFile.name.endswith((".xlsx", ".xls")):
-            df = pd.read_excel(uploadedFile)
+            dfRaw = pd.read_excel(uploadedFile)
         else:
             raise ValueError("Unsupported file type")
 
         # Clean automatically
-        df = cleanData(df)
+        df = cleanData(dfRaw)
 
         st.success("File uploaded and cleaned successfully.")
         st.write("Preview of cleaned data:")
