@@ -346,7 +346,6 @@ if uploadedFile is not None:
             st.error(f"Error reading file: {e}")
             st.session_state.workingDf = None
 
-else:
     # From here on, always work with session_state
     df = st.session_state.get('workingDf', None)
 
