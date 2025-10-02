@@ -228,7 +228,7 @@ def editData(df, action, **kwargs):
     elif action == 'changeDatatype':
         colToChange = kwargs.get('colToChange')
         dtypeChoice = kwargs.get('dtypeChoice')  # one of: 'int','float','string','date'
-        
+
         if colToChange not in dfLocal.columns:
             raise KeyError(f"Column {colToChange} not found")
 
@@ -511,6 +511,7 @@ if uploadedFile is not None:
                     workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
                     st.session_state.workingDf = workingDf
                     st.success(f"Deleted column {colToDelete}")
+                    st.dataframe(workingDf.head())
                 except Exception as e:
                     st.error(str(e))
 
