@@ -256,29 +256,25 @@ st.title("DataReader Web App")
 st.write("Web port of DataReader.py")
 
 # File uploader
-uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT", type=["csv", "xlsx", "txt"])
-
-# Option: let user specify header detection or apply auto-detection
-useHeaderDetection = st.checkbox("Auto detect header (try to infer)", value=True)
+uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
 
 if uploadedFile is not None:
-    # read file
     try:
-        if uploadedFile.name.lower().endswith(".csv") or uploadedFile.name.lower().endswith(".txt"):
-            # attempt to read with pandas' sniffing, fallback to simple read
-            try:
-                dfRaw = pd.read_csv(uploadedFile, header=None, sep=None, engine='python')
-            except Exception:
-                uploadedFile.seek(0)
-                dfRaw = pd.read_csv(uploadedFile)
-        elif uploadedFile.name.lower().endswith((".xls", ".xlsx")):
-            dfRaw = pd.read_excel(uploadedFile, header=None)
-        else:
-            st.error("Unsupported file type")
-            st.stop()
+        if uploadedFile.name.endswith((".csv", ".txt")):
+            df = pd.read_csv(uploadedFile)
+        elif uploadedFile.name.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(uploadedFile)
+
+        # Clean automatically
+        df = cleanData(df)
+
+        st.success("File uploaded and cleaned successfully.")
+        st.write("Preview of cleaned data:")
+        st.dataframe(df.head())
+
     except Exception as e:
-        st.error(f"Error reading file: {e}")
-        st.stop()
+        st.error(f"Error reading or cleaning file: {e}")
+        df = None
 
     # store original filename
     dfRaw.attrs['filename'] = uploadedFile.name
