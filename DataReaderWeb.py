@@ -318,9 +318,9 @@ if uploadedFile is not None:
     if 'lastFilename' not in st.session_state or st.session_state.lastFilename != uploadedFile.name:
         try:
             if uploadedFile.name.endswith((".csv", ".txt")):
-                dfRaw = pd.read_csv(uploadedFile, dtype=str)  # read as string to avoid stockNo issue
+                dfRaw = pd.read_csv(uploadedFile) 
             elif uploadedFile.name.endswith((".xlsx", ".xls")):
-                dfRaw = pd.read_excel(uploadedFile, dtype=str)
+                dfRaw = pd.read_excel(uploadedFile)
             else:
                 raise ValueError("Unsupported file type")
 
@@ -345,9 +345,6 @@ if uploadedFile is not None:
         except Exception as e:
             st.error(f"Error reading file: {e}")
             st.session_state.workingDf = None
-
-    # From here on, always work with session_state
-    df = st.session_state.get('workingDf', None)
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
