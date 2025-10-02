@@ -284,8 +284,6 @@ if uploadedFile is not None:
     headerExists = False
     if checkHeader(dfRaw):
         headerExists = checkHeader(dfRaw)
-    except Exception:
-            headerExists = False
    
     # Clean automatically
     df = cleanData(dfRaw)
