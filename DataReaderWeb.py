@@ -269,8 +269,6 @@ if uploadedFile is not None:
             raise ValueError("Unsupported file type")
 
         st.success("File uploaded and cleaned successfully.")
-        st.write("Preview of cleaned data:")
-        st.dataframe(df.head())
 
     except Exception as e:
         st.error(f"Error reading or cleaning file: {e}")
@@ -287,7 +285,10 @@ if uploadedFile is not None:
    
     # Clean automatically
     df = cleanData(dfRaw)
-    
+
+    st.write("Preview of cleaned data:")
+    st.dataframe(df.head())
+
     # Offer user choice to override
     headerOverride = st.radio("Does the first row represent headers?", ["Auto detect", "Yes", "No"])
     if headerOverride == "Auto detect":
