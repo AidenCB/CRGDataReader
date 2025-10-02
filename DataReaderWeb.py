@@ -593,23 +593,31 @@ if uploadedFile is not None:
     # ---------- Save / Export ----------
     elif mainMenu == "Save / Export":
         st.subheader("Save or export working dataframe")
-        saveChoice = st.radio("Save options", ["New File", "Same file"])
+
+        saveChoice = st.radio("Save options", ["New File", "Overwrite original file (if allowed)"])
+
         if saveChoice == "New File":
             newFilename = st.text_input("Enter new filename (end with .csv)")
-            if not newFilename.endswith('.csv'):
-                st.error("Filename must end with .csv")
-            else:
-                workingDf.to_csv(newFilename, index=False)
-                st.success(f"Saved to {newFilename}")
+            if newFilename:
+                if not newFilename.endswith('.csv'):
+                    st.error("Filename must end with .csv")
+                else:
+                    workingDf.to_csv(newFilename, index=False)
+                    st.success(f"Saved to {newFilename}")
+
         elif saveChoice == "Overwrite original file (if allowed)":
-            if 'filename' in df.attrs:
+            # Use stored dfRaw attrs, not workingDf
+            if "dfRaw" in st.session_state and "filename" in st.session_state.dfRaw.attrs:
+                originalFilename = st.session_state.dfRaw.attrs["filename"]
                 if st.button("Overwrite original upload"):
-                    originalFilename = df.attrs.get('filename')
                     try:
                         workingDf.to_csv(originalFilename, index=False)
                         st.success(f"Overwrote {originalFilename}")
                     except Exception as e:
                         st.error(f"Could not overwrite: {e}")
+            else:
+                st.warning("No original filename available to overwrite.")
+
 
     # Update session state workingDf
     st.session_state.workingDf = workingDf
