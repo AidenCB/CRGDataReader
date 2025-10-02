@@ -283,21 +283,6 @@ def editData(df, action, **kwargs):
     else:
         raise ValueError("Unknown action")
 
-# def saveData(df, saveChoice, newFilename=None, originalFilename=None):
-#     # saveChoice: 'new', 'overwrite', or 'none'
-#     if saveChoice == 'new':
-#         if newFilename is None:
-#             raise ValueError("newFilename required for saveChoice 'new'")
-#         df.to_csv(newFilename, index=False)
-#         return f"Dataframe saved to {newFilename}"
-#     elif saveChoice == 'overwrite':
-#         if originalFilename is None:
-#             raise ValueError("originalFilename required for overwrite")
-#         df.to_csv(originalFilename, index=False)
-#         return f"Dataframe overwritten to {originalFilename}"
-#     else:
-        return "Dataframe not saved"
-
 # -----------------------
 # Streamlit UI and mapping all functions
 # -----------------------
@@ -335,6 +320,11 @@ if uploadedFile is not None:
             st.error(f"Error reading file: {e}")
             st.session_state.workingDf = None
 
+    # Always work with session copy
+    workingDf = st.session_state.get("workingDf", None)
+else:
+    workingDf = None
+
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
         "Select operation",
@@ -350,8 +340,6 @@ if uploadedFile is not None:
             "Save / Export"
         ]
     )
-
-    workingDf = st.session_state.workingDf
 
     # Preview
     with st.expander("Preview data (first 10 rows)"):
