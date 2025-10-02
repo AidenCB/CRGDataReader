@@ -142,7 +142,7 @@ def cleanData(mainDf):
     return df
 
 def displayDates(df):
-    numericColumns = df.select_dtypes(include='number').columns
+    numericColumns = df.select_dtypes(include='datetime').columns
     output = {}
     if 'date' in df.columns:
         output['date'] = df.groupby(['date'])[numericColumns].mean().head()
@@ -272,6 +272,7 @@ if uploadedFile is not None:
     dfRaw.attrs['filename'] = uploadedFile.name
 
     df = dfRaw.copy()
+
     # If header exists, convert first row into header
     if checkHeader(dfRaw):
         # Convert first row values to lowercase if they are strings
