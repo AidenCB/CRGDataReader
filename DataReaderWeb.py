@@ -246,6 +246,7 @@ def editData(df, action, **kwargs):
             dfLocal[colToChange] = pd.to_numeric(dfLocal[colToChange], errors='coerce').astype(float)
         elif dtypeChoice == 'string':
             dfLocal[colToChange] = dfLocal[colToChange].astype(str)
+            dfLocal[colToChange] = dfLocal[colToChange].replace("nan", pd.NA)
         elif dtypeChoice == 'date':
             dfLocal[colToChange] = pd.to_datetime(dfLocal[colToChange], errors='coerce')
         else:
