@@ -170,14 +170,11 @@ def visualizeData(df):
 
 def findPercentiles(df, dfPercent, choice):
     results = {}
-
-    # Only process numeric columns
     numeric_df = df.select_dtypes(include=['number'])
 
     for col in dfPercent.index:
         if col not in numeric_df.columns:
             continue
-
         threshold = dfPercent[col]
 
         if choice == "Under percentile":
@@ -192,8 +189,8 @@ def findPercentiles(df, dfPercent, choice):
             "Values": values
         }
 
-    # Convert to DataFrame: Count + list of values
-    return pd.DataFrame(results).T  # transpose so columns are rows
+    return pd.DataFrame(results).T
+
 
 
 def showMathInfo(df):
@@ -412,22 +409,36 @@ if uploadedFile is not None:
                     minMaxRow(colChoice)
             # ---------- Percentiles ----------
             elif statOption == "Percentile":
-                userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
+                userPercent = st.number_input(
+                    "Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1
+                )
+
                 if st.button("Show Percentile"):
                     percent = round(userPercent / 100.0, 4)
                     dfPercent = workingDf.quantile(percent, numeric_only=True)
 
+                    # Save to session state
+                    st.session_state.dfPercent = dfPercent
+                    st.session_state.userPercent = userPercent
+
                     st.write(f"{userPercent}% percentile values")
                     st.dataframe(dfPercent)
 
-                    choice = st.radio("Show values relative to percentile:", 
-                                    ("None", "Under Percentile", "Over Percentile"),
-                                    key='percentile_choice')
+                # Only show radio if dfPercent exists
+                if "dfPercent" in st.session_state:
+                    choice = st.radio(
+                        "Show values relative to percentile:",
+                        ("None", "Under percentile", "Over percentile"),
+                        key="percentile_choice"
+                    )
 
                     if choice != "None":
-                        results = findPercentiles(workingDf, dfPercent, choice)
+                        results = findPercentiles(
+                            workingDf, st.session_state.dfPercent, choice
+                        )
                         st.write(f"Number of values {choice.lower()} for each column:")
                         st.dataframe(results)
+
             elif statOption == "All statistics":
                 st.dataframe(dfStats)
 
