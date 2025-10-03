@@ -342,28 +342,22 @@ if uploadedFile is not None:
             st.error(f"Error reading file: {e}")
             st.session_state.workingDf = None
 
-    # Always work with session copy
-    workingDf = st.session_state.get("workingDf")
-    if st.button("Rotate data?"):
-        try:
-            # Rotate the dataframe
-            workingDf = workingDf.T.reset_index(drop=False)
-            workingDf.columns = workingDf.columns.astype(str)
+        # Always work with session copy
+        workingDf = st.session_state.get("workingDf")
+        if st.button("Rotate data?"):
+            try:
+                # Rotate the dataframe
+                dfRaw = dfRaw.T.reset_index(drop=False)
+                dfRaw.columns = dfRaw.columns.astype(str)
 
-            # Save rotated DF to session state
-            st.session_state.workingDf = workingDf  
+                # Run cleaning
+                st.session_state.workingDf = cleanData(dfRaw)
 
-            # Run cleaning
-            workingDf = cleanData(workingDf)
+                st.success("Data rotated, headers checked, and cleaned successfully.")
+                st.dataframe(workingDf.head())
 
-            # Save cleaned DF back to session
-            st.session_state.workingDf = workingDf  
-
-            st.success("Data rotated, headers checked, and cleaned successfully.")
-            st.dataframe(workingDf.head())
-
-        except Exception as e:
-            st.error(f"Error rotating data: {e}")
+            except Exception as e:
+                st.error(f"Error rotating data: {e}")
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
