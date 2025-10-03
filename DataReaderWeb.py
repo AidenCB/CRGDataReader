@@ -110,7 +110,7 @@ def cleanData(mainDf):
 
     # Convert strings to numbers
     # Do it FIRST because it might convert numbers to date incorrectly otherwise
-    for column in df.select_dtypes(include="object").columns:
+    for column in df.columns:
         converted = pd.to_numeric(df[column], errors='coerce')
         # Does NOT have NaN, convert to numeric
         if not (converted.isna().all()):
