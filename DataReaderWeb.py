@@ -171,18 +171,29 @@ def visualizeData(df):
 def findPercentiles(df, dfPercent, choice):
     results = {}
 
-    for col in dfPercent.index:
-        threshold = dfPercent[col]
-        if pd.api.types.is_numeric_dtype(df[col]):  # Only process numeric columns
-            if choice == "Under percentile":
-                count = (df[col] < threshold).sum()
-            elif choice == "Over percentile":
-                count = (df[col] > threshold).sum()
-            else:
-                count = 0
-            results[col] = count
+    # Only process numeric columns
+    numeric_df = df.select_dtypes(include=['number'])
 
-    return pd.DataFrame.from_dict(results, orient="index", columns=["Count"])
+    for col in dfPercent.index:
+        if col not in numeric_df.columns:
+            continue
+
+        threshold = dfPercent[col]
+
+        if choice == "Under percentile":
+            values = numeric_df.loc[numeric_df[col] < threshold, col].tolist()
+        elif choice == "Over percentile":
+            values = numeric_df.loc[numeric_df[col] > threshold, col].tolist()
+        else:
+            values = []
+
+        results[col] = {
+            "Count": len(values),
+            "Values": values
+        }
+
+    # Convert to DataFrame: Count + list of values
+    return pd.DataFrame(results).T  # transpose so columns are rows
 
 def showMathInfo(df):
     numericCols = df.select_dtypes(include=['number'])
@@ -410,7 +421,7 @@ if uploadedFile is not None:
                     st.dataframe(dfPercent)
 
                     choice = st.radio("Show values relative to percentile:", 
-                                    ("None", "Under percentile", "Over percentile"))
+                                    ("None", "Under Percentile", "Over Percentile"))
 
                     if choice != "None":
                         results = findPercentiles(workingDf, dfPercent, choice)
