@@ -6,6 +6,368 @@ import seaborn as sns
 from datetime import datetime
 
 # -----------------------
+# Streamlit UI and mapping all functions
+# -----------------------
+
+st.set_page_config(page_title="DataReader Web", layout="wide")
+st.title("Datareader Web App")
+st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
+
+# File uploader
+uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
+dfRaw = None
+
+# Reset / Clear session button
+if st.button("Reset Data"):
+    for key in ["lastFilename", "dfRaw", "workingDf"]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.success("Session state cleared. Upload a new file to start again.")
+
+if uploadedFile is not None:
+    # Loads file, cleans data, and only reloads during new upload
+    if 'lastFilename' not in st.session_state or st.session_state.lastFilename != uploadedFile.name:
+        try:
+            if uploadedFile.name.endswith((".csv", ".txt")):
+                dfRaw = pd.read_csv(uploadedFile, header=None) 
+            elif uploadedFile.name.endswith((".xlsx", ".xls")):
+                dfRaw = pd.read_excel(uploadedFile)
+            else:
+                raise ValueError("Unsupported file type")
+
+            st.success("File uploaded successfully.")
+
+            # Store original filename
+            st.session_state.lastFilename = uploadedFile.name
+            dfRaw.attrs['filename'] = uploadedFile.name
+            st.session_state.dfRaw = dfRaw.copy()
+
+                # If header exists, convert first row into header
+            if checkHeader(dfRaw):
+                # Convert first row values to lowercase if they are strings
+                fixedCol = []
+                for val in dfRaw.iloc[0]:
+                    if isinstance(val, str):
+                        fixedCol.append(val.strip().lower())
+                    else:
+                        fixedCol.append(val)
+
+                dfRaw.columns = fixedCol
+                dfRaw = dfRaw.drop(index=0)
+                dfRaw = dfRaw.reset_index(drop=True)  # Remove the old header row, reset index
+            else:
+                # create default column names
+                dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
+
+            # Clean only once
+            st.session_state.workingDf = cleanData(dfRaw)
+
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
+            st.session_state.workingDf = None
+
+    # Always work with session copy
+    workingDf = st.session_state.get("workingDf")
+
+
+    st.sidebar.subheader("Main Menu")
+    mainMenu = st.sidebar.selectbox(
+        "Select operation",
+        [
+            "Numeric Statistics",
+            "Categorical Statistics",
+            "Datatypes",
+            "Display Dates",
+            "Display Uniques",
+            "Clean Data",
+            "Edit Data",
+            "Visualize Data",
+            "Save / Export"
+        ]
+    )
+
+    # Preview
+    with st.expander("Preview data (first 10 rows)"):
+        st.dataframe(workingDf.head(10))
+
+    # ---------- Numeric Statistics ----------
+    if mainMenu == "Numeric Statistics":
+        numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
+        if not numericCols:
+            st.info("No numeric columns available")
+        else:
+            st.subheader("Numeric Statistics")
+            dfStats = showMathInfo(workingDf)
+
+            statOption = st.radio(
+                "Choose a numeric statistic to view",
+                ["Count per column", "Mean", "Std", "Min/Max rows", "Percentile", "All statistics"]
+            )
+
+            if statOption == "Count per column":
+                st.write(dfStats.loc['count'])
+
+            elif statOption == "Mean":
+                st.write(dfStats.loc['mean'])
+
+            elif statOption == "Std":
+                st.write(dfStats.loc['std'])
+
+            elif statOption == "Min/Max rows":
+                colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
+                def minMaxRow(column):
+                    minVal = dfStats.at['min', column]
+                    maxVal = dfStats.at['max', column]
+                    minRow = workingDf[workingDf[column] == minVal]
+                    maxRow = workingDf[workingDf[column] == maxVal]
+                    st.write(f"Column: {column}")
+                    if not minRow.empty:
+                        st.write("Min row(s):")
+                        st.dataframe(minRow)
+                    else:
+                        st.write("No min row found")
+                    if not maxRow.empty:
+                        st.write("Max row(s):")
+                        st.dataframe(maxRow)
+                    else:
+                        st.write("No max row found")
+                if colChoice == "All":
+                    for col in numericCols:
+                        minMaxRow(col)
+                else:
+                    minMaxRow(colChoice)
+
+            elif statOption == "Percentile":
+                userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
+                if st.button("Show Percentile"):
+                    percent = round(userPercent / 100.0, 4)
+                    dfPercent = workingDf.quantile(percent, numeric_only=True)
+                    st.write(f"{userPercent}% percentile values")
+                    st.dataframe(dfPercent)
+
+            elif statOption == "All statistics":
+                st.dataframe(dfStats)
+
+    # ---------- Categorical Statistics ----------
+    elif mainMenu == "Categorical Statistics":
+        st.subheader("Categorical Statistics")
+        catStats = showCategoricalInfo(workingDf)
+        st.dataframe(catStats)
+
+
+    # ---------- Datatypes ----------
+    elif mainMenu == "Datatypes":
+        st.subheader("Column datatypes")
+        st.write(workingDf.dtypes)
+
+        editAction = st.selectbox("Edit datatypes", ["Change datatype"])
+        if editAction == "None":
+            pass
+        elif editAction == "Change datatype":
+            colToChange = st.selectbox("Select column to change datatype", workingDf.columns.tolist())
+            dtypeChoice = st.selectbox("Target datatype", ["int", "float", "string", "date"])
+            if st.button("Change datatype"):
+                try:
+                    workingDf = editData(workingDf, 'changeDatatype', colToChange=colToChange, dtypeChoice=dtypeChoice)
+                    st.session_state.workingDf = workingDf
+                    st.success(f"Converted {colToChange} to {dtypeChoice}")
+                except Exception as e:
+                    st.error(str(e))
+
+    # ---------- Display Dates ----------
+    elif mainMenu == "Display Dates":
+        st.subheader("Display date-grouped numeric means")
+        dateOutputs = displayDates(workingDf)
+        if not dateOutputs:
+            st.info("No date columns found")
+        else:
+            for k, v in dateOutputs.items():
+                st.write(f"Group by {k}")
+                st.dataframe(v)
+
+    # ---------- Display Uniques ----------
+    elif mainMenu == "Display Uniques":
+        st.subheader("Unique values per column")
+        uniques = displayUniques(workingDf)
+        for col, vals in uniques.items():
+            st.write(f"{col} ({len(vals)} unique)")
+            st.write(vals)
+
+    # ---------- Clean Data ----------
+    elif mainMenu == "Clean Data":
+        st.subheader("Clean data options")
+        st.write("Use these actions to clean the working data. Changes are applied to the working copy.")
+
+        if st.button("Reset working data to original upload"):
+            workingDf = st.session_state.workingDf
+            st.success("Reset complete")
+            st.dataframe(workingDf.head())
+
+    # ---------- Edit Data ----------
+    elif mainMenu == "Edit Data":
+        st.subheader("Edit data")
+        editAction = st.selectbox("Choose edit action", ["View data", "Rename column", "Delete column", "Drop duplicates", "Sort by column", "Change Date"])
+        if editAction == "View data":
+            numShow = st.number_input("Rows to show (min. 10)", min_value=10, max_value=workingDf.shape[0], value=10)
+            st.dataframe(editData(workingDf, 'viewHead', numShow=numShow))
+
+        elif editAction == "Rename column":
+            colToEdit = st.selectbox("Select column to rename", workingDf.columns.tolist())
+            newColName = st.text_input("New column")
+            if st.button("Rename column"):
+                try:
+                    workingDf = editData(workingDf, 'renameColumn', colToEdit=colToEdit, newColName=newColName)
+                    st.session_state.workingDf = workingDf
+                    st.success(f"Renamed {colToEdit} to {newColName}")
+                    st.dataframe(workingDf.head())
+                except Exception as e:
+                    st.error(str(e))
+
+        elif editAction == "Delete column":
+            colToDelete = st.selectbox("Select column to delete", workingDf.columns.tolist())
+            if st.button("Delete column"):
+                try:
+                    workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
+                    st.session_state.workingDf = workingDf
+                    st.success(f"Deleted column {colToDelete}")
+                    st.dataframe(workingDf.head())
+                except Exception as e:
+                    st.error(str(e))
+
+        elif editAction == "Drop duplicates":
+            subsetCols = st.multiselect("Subset columns for duplicate detection (empty = all columns)", workingDf.columns.tolist())
+            keepOption = st.selectbox("Keep which", ["first", "last", "none"])
+            if st.button("Drop duplicates"):
+                before = len(workingDf)
+                if subsetCols:
+                    if keepOption == "none":
+                        workingDf = workingDf.drop_duplicates(subset=subsetCols, keep=False)
+                    else:
+                        workingDf = workingDf.drop_duplicates(subset=subsetCols, keep=keepOption)
+                else:
+                    if keepOption == "none":
+                        workingDf = workingDf.drop_duplicates(keep=False)
+                    else:
+                        workingDf = workingDf.drop_duplicates(keep=keepOption)
+                st.session_state.workingDf = workingDf
+                after = len(workingDf)
+                st.success(f"Dropped duplicates, rows before: {before}, rows after: {after}")
+
+        elif editAction == "Sort by column":
+            sortCol = st.selectbox("Select column to sort by", workingDf.columns.tolist())
+            ascending = st.checkbox("Sort ascending", value=True)
+            if st.button("Sort"):
+                workingDf = workingDf.sort_values(by=sortCol, ascending=ascending).reset_index(drop=True)
+                st.session_state.workingDf = workingDf
+                st.success(f"Sorted by {sortCol} {'ascending' if ascending else 'descending'}")
+                st.dataframe(workingDf.head())
+        
+        elif editAction == "Change Date":
+            dateCols = [col for col in workingDf.columns if pd.api.types.is_datetime64_any_dtype(workingDf[col])]
+            if dateCols:
+                colToEdit = st.selectbox("Select datetime column", dateCols)
+                # Checkboxes for components
+                components = []
+                if st.checkbox("Year"): components.append('year')
+                if st.checkbox("Month"): components.append('month')
+                if st.checkbox("Day"): components.append('day')
+                if st.checkbox("Hour"): components.append('hour')
+                if st.checkbox("Minute"): components.append('minute')
+                if st.checkbox("Second"): components.append('second')
+
+                if st.button("Apply"):
+                    workingDf = editData(workingDf, 'changeDate', colToEdit=colToEdit, components=components)
+                    st.session_state.workingDf = workingDf
+                    st.success("Datetime components extracted")
+                    st.dataframe(workingDf.head())
+
+            # ---------- Visualize Data ----------
+    elif mainMenu == "Visualize Data":
+        st.subheader("Visualize data")
+        numericCols, categoricalCols = visualizeData(workingDf)
+        vizType = st.selectbox("Choose visualization", ["Histogram", "Boxplot", "Scatter", "Bar (categorical)", "Correlation heatmap"])
+        if vizType == "Histogram":
+            if not numericCols:
+                st.info("No numeric columns available")
+            else:
+                colChoice = st.selectbox("Select numeric column", numericCols)
+                bins = st.slider("Bins", min_value=5, max_value=200, value=20)
+                fig, ax = plt.subplots()
+                ax.hist(workingDf[colChoice].dropna(), bins=bins)
+                ax.set_title(f"Histogram of {colChoice}")
+                st.pyplot(fig)
+
+        elif vizType == "Boxplot":
+            if not numericCols:
+                st.info("No numeric columns available")
+            else:
+                colChoice = st.selectbox("Select numeric column", numericCols)
+                fig, ax = plt.subplots()
+                ax.boxplot(workingDf[colChoice].dropna())
+                ax.set_title(f"Boxplot of {colChoice}")
+                st.pyplot(fig)
+
+        elif vizType == "Scatter":
+            if len(numericCols) < 2:
+                st.info("Need at least two numeric columns for scatter plot")
+            else:
+                xCol = st.selectbox("X axis", numericCols)
+                yCol = st.selectbox("Y axis", [c for c in numericCols if c != xCol])
+                fig, ax = plt.subplots()
+                ax.scatter(workingDf[xCol], workingDf[yCol])
+                ax.set_xlabel(xCol)
+                ax.set_ylabel(yCol)
+                ax.set_title(f"Scatter: {xCol} vs {yCol}")
+                st.pyplot(fig)
+
+        elif vizType == "Bar (categorical)":
+            if not categoricalCols:
+                st.info("No categorical columns")
+            else:
+                colChoice = st.selectbox("Select categorical column", categoricalCols)
+                counts = workingDf[colChoice].value_counts().head(50)
+                fig, ax = plt.subplots(figsize=(8, 4))
+                sns.barplot(x=counts.values, y=counts.index, ax=ax)
+                ax.set_xlabel("Count")
+                ax.set_ylabel(colChoice)
+                st.pyplot(fig)
+
+        elif vizType == "Correlation heatmap":
+            if len(numericCols) < 2:
+                st.info("Need at least two numeric columns")
+            else:
+                corr = workingDf[numericCols].corr()
+                fig, ax = plt.subplots(figsize=(10, 8))
+                sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
+                st.pyplot(fig)
+
+    # ---------- Save / Export ----------
+    elif mainMenu == "Save / Export":
+        st.subheader("Save or export working data")
+    
+        # Default export filename = original + "_edited.csv"
+        defaultFilename = "export.csv"
+        if "dfRaw" in st.session_state and "filename" in st.session_state.dfRaw.attrs:
+            base = st.session_state.dfRaw.attrs["filename"].rsplit(".", 1)[0]
+            defaultFilename = f"{base}_edited.csv"
+    
+        # Text input so user can rename before downloading
+        newFilename = st.text_input("Filename for download", defaultFilename)
+    
+        # Convert working df to CSV
+        csv = workingDf.to_csv(index=False).encode("utf-8")
+    
+        # Download button
+        st.download_button(
+            label="Download CSV",
+            data=csv,
+            file_name=newFilename,
+            mime="text/csv"
+        )
+
+    # Update session state workingDf
+    st.session_state.workingDf = workingDf
+# -----------------------
 # Helper functions (ported from DataReader.py)
 # -----------------------
 
@@ -254,365 +616,3 @@ def editData(df, action, **kwargs):
     else:
         raise ValueError("Unknown action")
 
-# -----------------------
-# Streamlit UI and mapping all functions
-# -----------------------
-
-st.set_page_config(page_title="DataReader Web", layout="wide")
-st.title("Datareader Web App")
-st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
-
-# File uploader
-uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
-dfRaw = None
-
-# Reset / Clear session button
-if st.button("Reset Data"):
-    for key in ["lastFilename", "dfRaw", "workingDf"]:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.success("Session state cleared. Upload a new file to start again.")
-
-if uploadedFile is not None:
-    # Always reload on new file
-    if 'lastFilename' not in st.session_state or st.session_state.lastFilename != uploadedFile.name:
-        try:
-            if uploadedFile.name.endswith((".csv", ".txt")):
-                dfRaw = pd.read_csv(uploadedFile, header=None) 
-            elif uploadedFile.name.endswith((".xlsx", ".xls")):
-                dfRaw = pd.read_excel(uploadedFile)
-            else:
-                raise ValueError("Unsupported file type")
-
-            st.success("File uploaded successfully.")
-
-            # Store original filename
-            st.session_state.lastFilename = uploadedFile.name
-            dfRaw.attrs['filename'] = uploadedFile.name
-            st.session_state.dfRaw = dfRaw.copy()
-
-                # If header exists, convert first row into header
-            if checkHeader(dfRaw):
-                # Convert first row values to lowercase if they are strings
-                fixedCol = []
-                for val in dfRaw.iloc[0]:
-                    if isinstance(val, str):
-                        fixedCol.append(val.strip().lower())
-                    else:
-                        fixedCol.append(val)
-
-                dfRaw.columns = fixedCol
-                dfRaw = dfRaw.drop(index=0)
-                dfRaw = dfRaw.reset_index(drop=True)  # Remove the old header row, reset index
-            else:
-                # create default column names
-                dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
-
-            # Clean only once
-            st.session_state.workingDf = cleanData(dfRaw)
-
-        except Exception as e:
-            st.error(f"Error reading file: {e}")
-            st.session_state.workingDf = None
-
-    # Always work with session copy
-    workingDf = st.session_state.get("workingDf")
-
-
-    st.sidebar.subheader("Main Menu")
-    mainMenu = st.sidebar.selectbox(
-        "Select operation",
-        [
-            "Numeric Statistics",
-            "Categorical Statistics",
-            "Datatypes",
-            "Display Dates",
-            "Display Uniques",
-            "Clean Data",
-            "Edit Dataframe",
-            "Visualize Data",
-            "Save / Export"
-        ]
-    )
-
-    # Preview
-    with st.expander("Preview data (first 10 rows)"):
-        st.dataframe(workingDf.head(10))
-
-    # ---------- Numeric Statistics ----------
-    if mainMenu == "Numeric Statistics":
-        numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
-        if not numericCols:
-            st.info("No numeric columns available")
-        else:
-            st.subheader("Numeric Statistics")
-            dfStats = showMathInfo(workingDf)
-
-            statOption = st.radio(
-                "Choose a numeric statistic to view",
-                ["Count per column", "Mean", "Std", "Min/Max rows", "Percentile", "All statistics"]
-            )
-
-            if statOption == "Count per column":
-                st.write(dfStats.loc['count'])
-
-            elif statOption == "Mean":
-                st.write(dfStats.loc['mean'])
-
-            elif statOption == "Std":
-                st.write(dfStats.loc['std'])
-
-            elif statOption == "Min/Max rows":
-                colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
-                def minMaxRow(column):
-                    minVal = dfStats.at['min', column]
-                    maxVal = dfStats.at['max', column]
-                    minRow = workingDf[workingDf[column] == minVal]
-                    maxRow = workingDf[workingDf[column] == maxVal]
-                    st.write(f"Column: {column}")
-                    if not minRow.empty:
-                        st.write("Min row(s):")
-                        st.dataframe(minRow)
-                    else:
-                        st.write("No min row found")
-                    if not maxRow.empty:
-                        st.write("Max row(s):")
-                        st.dataframe(maxRow)
-                    else:
-                        st.write("No max row found")
-                if colChoice == "All":
-                    for col in numericCols:
-                        minMaxRow(col)
-                else:
-                    minMaxRow(colChoice)
-
-            elif statOption == "Percentile":
-                userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
-                if st.button("Show Percentile"):
-                    percent = round(userPercent / 100.0, 4)
-                    dfPercent = workingDf.quantile(percent, numeric_only=True)
-                    st.write(f"{userPercent}% percentile values")
-                    st.dataframe(dfPercent)
-
-            elif statOption == "All statistics":
-                st.dataframe(dfStats)
-
-    # ---------- Categorical Statistics ----------
-    elif mainMenu == "Categorical Statistics":
-        st.subheader("Categorical Statistics")
-        catStats = showCategoricalInfo(workingDf)
-        st.dataframe(catStats)
-
-
-    # ---------- Datatypes ----------
-    elif mainMenu == "Datatypes":
-        st.subheader("Column datatypes")
-        st.write(workingDf.dtypes)
-
-        editAction = st.selectbox("Edit datatypes", ["Change datatype"])
-        if editAction == "None":
-            pass
-        elif editAction == "Change datatype":
-            colToChange = st.selectbox("Select column to change datatype", workingDf.columns.tolist())
-            dtypeChoice = st.selectbox("Target datatype", ["int", "float", "string", "date"])
-            if st.button("Change datatype"):
-                try:
-                    workingDf = editData(workingDf, 'changeDatatype', colToChange=colToChange, dtypeChoice=dtypeChoice)
-                    st.session_state.workingDf = workingDf
-                    st.success(f"Converted {colToChange} to {dtypeChoice}")
-                except Exception as e:
-                    st.error(str(e))
-
-    # ---------- Display Dates ----------
-    elif mainMenu == "Display Dates":
-        st.subheader("Display date-grouped numeric means")
-        dateOutputs = displayDates(workingDf)
-        if not dateOutputs:
-            st.info("No date columns found")
-        else:
-            for k, v in dateOutputs.items():
-                st.write(f"Group by {k}")
-                st.dataframe(v)
-
-    # ---------- Display Uniques ----------
-    elif mainMenu == "Display Uniques":
-        st.subheader("Unique values per column")
-        uniques = displayUniques(workingDf)
-        for col, vals in uniques.items():
-            st.write(f"{col} ({len(vals)} unique)")
-            st.write(vals)
-
-    # ---------- Clean Data ----------
-    elif mainMenu == "Clean Data":
-        st.subheader("Clean data options")
-        st.write("Use these actions to clean the working dataframe. Changes are applied to the working copy.")
-
-        if st.button("Reset working dataframe to original upload"):
-            workingDf = st.session_state.workingDf
-            st.success("Reset complete")
-            st.dataframe(workingDf.head())
-
-    # ---------- Edit Dataframe ----------
-    elif mainMenu == "Edit Dataframe":
-        st.subheader("Edit dataframe")
-        editAction = st.selectbox("Choose edit action", ["View head", "Rename column", "Delete column", "Drop duplicates", "Sort by column", "Change Date"])
-        if editAction == "View head":
-            numShow = st.number_input("Rows to show", min_value=1, max_value=1000, value=5)
-            st.dataframe(editData(workingDf, 'viewHead', numShow=numShow))
-
-        elif editAction == "Rename column":
-            colToEdit = st.selectbox("Select column to rename", workingDf.columns.tolist())
-            newColName = st.text_input("New column")
-            if st.button("Rename column"):
-                try:
-                    workingDf = editData(workingDf, 'renameColumn', colToEdit=colToEdit, newColName=newColName)
-                    st.session_state.workingDf = workingDf
-                    st.success(f"Renamed {colToEdit} to {newColName}")
-                    st.dataframe(workingDf.head())
-                except Exception as e:
-                    st.error(str(e))
-
-        elif editAction == "Delete column":
-            colToDelete = st.selectbox("Select column to delete", workingDf.columns.tolist())
-            if st.button("Delete column"):
-                try:
-                    workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
-                    st.session_state.workingDf = workingDf
-                    st.success(f"Deleted column {colToDelete}")
-                    st.dataframe(workingDf.head())
-                except Exception as e:
-                    st.error(str(e))
-
-        elif editAction == "Drop duplicates":
-            subsetCols = st.multiselect("Subset columns for duplicate detection (empty = all columns)", workingDf.columns.tolist())
-            keepOption = st.selectbox("Keep which", ["first", "last", "none"])
-            if st.button("Drop duplicates"):
-                before = len(workingDf)
-                if subsetCols:
-                    if keepOption == "none":
-                        workingDf = workingDf.drop_duplicates(subset=subsetCols, keep=False)
-                    else:
-                        workingDf = workingDf.drop_duplicates(subset=subsetCols, keep=keepOption)
-                else:
-                    if keepOption == "none":
-                        workingDf = workingDf.drop_duplicates(keep=False)
-                    else:
-                        workingDf = workingDf.drop_duplicates(keep=keepOption)
-                st.session_state.workingDf = workingDf
-                after = len(workingDf)
-                st.success(f"Dropped duplicates, rows before: {before}, rows after: {after}")
-
-        elif editAction == "Sort by column":
-            sortCol = st.selectbox("Select column to sort by", workingDf.columns.tolist())
-            ascending = st.checkbox("Sort ascending", value=True)
-            if st.button("Sort"):
-                workingDf = workingDf.sort_values(by=sortCol, ascending=ascending).reset_index(drop=True)
-                st.session_state.workingDf = workingDf
-                st.success(f"Sorted by {sortCol} {'ascending' if ascending else 'descending'}")
-                st.dataframe(workingDf.head())
-        
-        elif editAction == "Change Date":
-            dateCols = [col for col in workingDf.columns if pd.api.types.is_datetime64_any_dtype(workingDf[col])]
-            if dateCols:
-                colToEdit = st.selectbox("Select datetime column", dateCols)
-                # Checkboxes for components
-                components = []
-                if st.checkbox("Year"): components.append('year')
-                if st.checkbox("Month"): components.append('month')
-                if st.checkbox("Day"): components.append('day')
-                if st.checkbox("Hour"): components.append('hour')
-                if st.checkbox("Minute"): components.append('minute')
-                if st.checkbox("Second"): components.append('second')
-
-                if st.button("Apply"):
-                    workingDf = editData(workingDf, 'changeDate', colToEdit=colToEdit, components=components)
-                    st.session_state.workingDf = workingDf
-                    st.success("Datetime components extracted")
-                    st.dataframe(workingDf.head())
-
-            # ---------- Visualize Data ----------
-    elif mainMenu == "Visualize Data":
-        st.subheader("Visualize data")
-        numericCols, categoricalCols = visualizeData(workingDf)
-        vizType = st.selectbox("Choose visualization", ["Histogram", "Boxplot", "Scatter", "Bar (categorical)", "Correlation heatmap"])
-        if vizType == "Histogram":
-            if not numericCols:
-                st.info("No numeric columns available")
-            else:
-                colChoice = st.selectbox("Select numeric column", numericCols)
-                bins = st.slider("Bins", min_value=5, max_value=200, value=20)
-                fig, ax = plt.subplots()
-                ax.hist(workingDf[colChoice].dropna(), bins=bins)
-                ax.set_title(f"Histogram of {colChoice}")
-                st.pyplot(fig)
-
-        elif vizType == "Boxplot":
-            if not numericCols:
-                st.info("No numeric columns available")
-            else:
-                colChoice = st.selectbox("Select numeric column", numericCols)
-                fig, ax = plt.subplots()
-                ax.boxplot(workingDf[colChoice].dropna())
-                ax.set_title(f"Boxplot of {colChoice}")
-                st.pyplot(fig)
-
-        elif vizType == "Scatter":
-            if len(numericCols) < 2:
-                st.info("Need at least two numeric columns for scatter plot")
-            else:
-                xCol = st.selectbox("X axis", numericCols)
-                yCol = st.selectbox("Y axis", [c for c in numericCols if c != xCol])
-                fig, ax = plt.subplots()
-                ax.scatter(workingDf[xCol], workingDf[yCol])
-                ax.set_xlabel(xCol)
-                ax.set_ylabel(yCol)
-                ax.set_title(f"Scatter: {xCol} vs {yCol}")
-                st.pyplot(fig)
-
-        elif vizType == "Bar (categorical)":
-            if not categoricalCols:
-                st.info("No categorical columns")
-            else:
-                colChoice = st.selectbox("Select categorical column", categoricalCols)
-                counts = workingDf[colChoice].value_counts().head(50)
-                fig, ax = plt.subplots(figsize=(8, 4))
-                sns.barplot(x=counts.values, y=counts.index, ax=ax)
-                ax.set_xlabel("Count")
-                ax.set_ylabel(colChoice)
-                st.pyplot(fig)
-
-        elif vizType == "Correlation heatmap":
-            if len(numericCols) < 2:
-                st.info("Need at least two numeric columns")
-            else:
-                corr = workingDf[numericCols].corr()
-                fig, ax = plt.subplots(figsize=(10, 8))
-                sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
-                st.pyplot(fig)
-
-    # ---------- Save / Export ----------
-    elif mainMenu == "Save / Export":
-        st.subheader("Save or export working dataframe")
-    
-        # Default export filename = original + "_edited.csv"
-        defaultFilename = "export.csv"
-        if "dfRaw" in st.session_state and "filename" in st.session_state.dfRaw.attrs:
-            base = st.session_state.dfRaw.attrs["filename"].rsplit(".", 1)[0]
-            defaultFilename = f"{base}_edited.csv"
-    
-        # Text input so user can rename before downloading
-        newFilename = st.text_input("Filename for download", defaultFilename)
-    
-        # Convert working df to CSV
-        csv = workingDf.to_csv(index=False).encode("utf-8")
-    
-        # Download button
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name=newFilename,
-            mime="text/csv"
-        )
-
-    # Update session state workingDf
-    st.session_state.workingDf = workingDf
