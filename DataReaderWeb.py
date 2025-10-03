@@ -7,9 +7,6 @@ from datetime import datetime
 
 # -----------------------
 # Streamlit UI and mapping all functions
-#
-#
-# TESTING
 # -----------------------
 
 st.set_page_config(page_title="DataReader Web", layout="wide")
