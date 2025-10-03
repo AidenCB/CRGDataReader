@@ -22,6 +22,25 @@ def checkHeader(mainDf):
     else:
         return True
 
+def setHeader(rawDF):
+    # If header exists, convert first row into header
+    if checkHeader(dfRaw):
+        # Convert first row values to lowercase if they are strings
+        fixedCol = []
+        for val in dfRaw.iloc[0]:
+            if isinstance(val, str):
+                fixedCol.append(val.strip().lower())
+            else:
+                fixedCol.append(val)
+
+        dfRaw.columns = fixedCol
+        dfRaw = dfRaw.drop(index=0)
+        dfRaw = dfRaw.reset_index(drop=True)  # Remove the old header row, reset index
+    else:
+        # create default column names
+        dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
+    return dfRaw
+
 def dateTimeColumn(series):
     s = series.copy()
 
@@ -102,6 +121,7 @@ def getDateTime(copyDf):
 def cleanData(mainDf):
     df = mainDf.copy()
 
+    df = setHeader(df)
     # Remove commas from numbers and replacing with periods
     for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
         df[column] = df[column].str.replace(',', '.', regex=True) 
@@ -315,23 +335,6 @@ if uploadedFile is not None:
             dfRaw.attrs['filename'] = uploadedFile.name
             st.session_state.dfRaw = dfRaw.copy()
             
-            # If header exists, convert first row into header
-            if checkHeader(dfRaw):
-                # Convert first row values to lowercase if they are strings
-                fixedCol = []
-                for val in dfRaw.iloc[0]:
-                    if isinstance(val, str):
-                        fixedCol.append(val.strip().lower())
-                    else:
-                        fixedCol.append(val)
-
-                dfRaw.columns = fixedCol
-                dfRaw = dfRaw.drop(index=0)
-                dfRaw = dfRaw.reset_index(drop=True)  # Remove the old header row, reset index
-            else:
-                # create default column names
-                dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
-
             # Clean only once
             st.session_state.workingDf = cleanData(dfRaw)
 
@@ -349,9 +352,6 @@ if uploadedFile is not None:
 
             # Save rotated DF to session state
             st.session_state.workingDf = workingDf  
-
-            # Run header check
-            workingDf = checkHeader(workingDf)
 
             # Run cleaning
             workingDf = cleanData(workingDf)
