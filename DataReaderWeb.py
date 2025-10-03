@@ -155,8 +155,6 @@ def displayDates(df):
 
     return output
 
-
-
 def displayUniques(df):
     uniques = {}
     for column in df.columns:
@@ -170,6 +168,14 @@ def visualizeData(df):
     categoricalColumns = df.select_dtypes(exclude=['number']).columns.tolist()
     return numericColumns, categoricalColumns
 
+def getPercentiles(df, dfPercent):
+    percentiles = {}
+    for col in dfPercent.index:
+        if col in df.columns:
+            percentiles[col] = dfPercent[col]
+
+    st.write("Percentiles found:", percentiles)
+    return percentiles
 def showMathInfo(df):
     numericCols = df.select_dtypes(include=['number'])
     if numericCols.shape[1] == 0:
@@ -178,7 +184,6 @@ def showMathInfo(df):
 
     dfStats = numericCols.describe()
     return dfStats
-
         
 def showCategoricalInfo(df):
     catCols = df.select_dtypes(include=['object', 'category'])
@@ -391,6 +396,7 @@ if uploadedFile is not None:
                 if st.button("Show Percentile"):
                     percent = round(userPercent / 100.0, 4)
                     dfPercent = workingDf.quantile(percent, numeric_only=True)
+                    findPercentiles(dfPercent, dfPercent)
                     st.write(f"{userPercent}% percentile values")
                     st.dataframe(dfPercent)
 
