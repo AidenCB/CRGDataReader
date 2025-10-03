@@ -312,8 +312,8 @@ if uploadedFile is not None:
             st.session_state.lastFilename = uploadedFile.name
             dfRaw.attrs['filename'] = uploadedFile.name
             st.session_state.dfRaw = dfRaw.copy()
-
-                # If header exists, convert first row into header
+            
+            # If header exists, convert first row into header
             if checkHeader(dfRaw):
                 # Convert first row values to lowercase if they are strings
                 fixedCol = []
@@ -339,7 +339,28 @@ if uploadedFile is not None:
 
     # Always work with session copy
     workingDf = st.session_state.get("workingDf")
+    if st.button("Rotate data?"):
+        try:
+            # Rotate the dataframe
+            workingDf = rotateDataframe(workingDf)
 
+            # Save rotated DF to session state
+            st.session_state.workingDf = workingDf  
+
+            # Run header check
+            workingDf = checkHeader(workingDf)
+
+            # Run cleaning
+            workingDf = cleanData(workingDf)
+
+            # Save cleaned DF back to session
+            st.session_state.workingDf = workingDf  
+
+            st.success("Data rotated, headers checked, and cleaned successfully.")
+            st.dataframe(workingDf.head())
+
+        except Exception as e:
+            st.error(f"Error rotating data: {e}")
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
