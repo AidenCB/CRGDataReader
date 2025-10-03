@@ -102,7 +102,7 @@ def cleanData(mainDf):
     df = mainDf.copy()
 
     # Remove commas from numbers and replacing with periods
-    for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
+    for column in df.columns:  # Only doing operation on strings
         df[column] = df[column].str.replace(',', '.', regex=True) 
         # Check for "/", "-" 
         if df[column].str.contains(r'[\/\-]').any():
