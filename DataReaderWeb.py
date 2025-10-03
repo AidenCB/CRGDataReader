@@ -22,7 +22,7 @@ def checkHeader(mainDf):
     else:
         return True
 
-def setHeader(rawDF):
+def setHeader(dfRaw):
     # If header exists, convert first row into header
     if checkHeader(dfRaw):
         # Convert first row values to lowercase if they are strings
