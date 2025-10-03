@@ -473,12 +473,17 @@ if uploadedFile is not None:
                     st.error(str(e))
 
         elif editAction == "Delete column":
-            colToDelete = st.selectbox("Select column to delete", workingDf.columns.tolist())
-            if st.button("Delete column"):
+            colsToDelete = []
+            for col in workingDf.columns:
+                if st.checkbox(f"Delete {col}"):
+                    colsToDelete.append(col)
+
+            if st.button("Delete selected columns"):
                 try:
-                    workingDf = editData(workingDf, 'deleteColumn', colToDelete=colToDelete)
+                    for col in colsToDelete:
+                        workingDf = editData(workingDf, 'deleteColumn', colToDelete=col)
                     st.session_state.workingDf = workingDf
-                    st.success(f"Deleted column {colToDelete}")
+                    st.success(f"Deleted columns: {', '.join(colsToDelete)}")
                     st.dataframe(workingDf.head())
                 except Exception as e:
                     st.error(str(e))
