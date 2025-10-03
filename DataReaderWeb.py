@@ -113,7 +113,7 @@ def cleanData(mainDf):
     for column in df.select_dtypes(include="object").columns:
         converted = pd.to_numeric(df[column], errors='coerce')
         # Does NOT have NaN, convert to numeric
-        if not (converted.isna().all()):
+        if not (converted.isna().sum() / len(converted) > 0.85):
             df[column] = converted 
 
 
@@ -386,7 +386,7 @@ if uploadedFile is not None:
 
             elif statOption == "Std":
                 st.write(dfStats.loc['std'])
-
+            # ---------- Min/Max Rows ----------
             elif statOption == "Min/Max rows":
                 colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
                 def minMaxRow(column):
@@ -410,10 +410,9 @@ if uploadedFile is not None:
                         minMaxRow(col)
                 else:
                     minMaxRow(colChoice)
-
+            # ---------- Percentiles ----------
             elif statOption == "Percentile":
                 userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
-
                 if st.button("Show Percentile"):
                     percent = round(userPercent / 100.0, 4)
                     dfPercent = workingDf.quantile(percent, numeric_only=True)
@@ -422,7 +421,8 @@ if uploadedFile is not None:
                     st.dataframe(dfPercent)
 
                     choice = st.radio("Show values relative to percentile:", 
-                                    ("None", "Under Percentile", "Over Percentile"))
+                                    ("None", "Under Percentile", "Over Percentile"),
+                                    key='percentile_choice')
 
                     if choice != "None":
                         results = findPercentiles(workingDf, dfPercent, choice)
@@ -640,7 +640,7 @@ if uploadedFile is not None:
             defaultFilename = f"{base}_edited.csv"
     
         # Text input so user can rename before downloading
-        newFilename = st.text_input("Filename for download", defaultFilename)
+        newFilename = st.text_input("Filename for download (then press enter)", defaultFilename, max_chars=20)
     
         # Convert working df to CSV
         csv = workingDf.to_csv(index=False).encode("utf-8")
