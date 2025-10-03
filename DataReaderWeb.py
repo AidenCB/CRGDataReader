@@ -349,11 +349,11 @@ if uploadedFile is not None:
         try:
             dfRaw = st.session_state.dfRaw
             # Rotate the dataframe
-            dfRotated = dfRaw.T.reset_index(drop=False)
-            dfRotated.columns = dfRotated.columns.astype(str)
+            workingDf = dfRaw.T.reset_index(drop=False)
+            workingDf.columns = workingDf.columns.astype(str)
 
             # Run cleaning
-            st.session_state.workingDf = cleanData(dfRotated)
+            st.session_state.workingDf = cleanData(workingDf)
 
             # Success message with placeholder (can be cleared)
             msg_placeholder = st.empty()
