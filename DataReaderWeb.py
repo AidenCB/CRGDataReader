@@ -336,28 +336,34 @@ if uploadedFile is not None:
             st.session_state.dfRaw = dfRaw.copy()
             
             # Clean only once
-            st.session_state.workingDf = cleanData(dfRaw)
+            st.session_state.workingDf = cleanData(st.session_state.dfRaw)
 
         except Exception as e:
             st.error(f"Error reading file: {e}")
             st.session_state.workingDf = None
 
-        # Always work with session copy
-        workingDf = st.session_state.get("workingDf")
-        if st.button("Rotate data?"):
-            try:
-                # Rotate the dataframe
-                dfRaw = dfRaw.T.reset_index(drop=False)
-                dfRaw.columns = dfRaw.columns.astype(str)
+    # Always work with session copy
+    workingDf = st.session_state.get("workingDf")
 
-                # Run cleaning
-                st.session_state.workingDf = cleanData(dfRaw)
+    if workingDf is not None and st.button("Rotate data?"):
+        try:
+            # Rotate the dataframe
+            dfRotated = dfRaw.T.reset_index(drop=False)
+            dfRotated.columns = dfRotated.columns.astype(str)
 
-                st.success("Data rotated, headers checked, and cleaned successfully.")
-                st.dataframe(workingDf.head())
+            # Run cleaning
+            st.session_state.workingDf = cleanData(dfRotated)
 
-            except Exception as e:
-                st.error(f"Error rotating data: {e}")
+            # Success message with placeholder (can be cleared)
+            msg_placeholder = st.empty()
+            msg_placeholder.success("Data rotated, headers checked, and cleaned successfully.")
+
+            # Show new rotated + cleaned data
+            st.dataframe(st.session_state.workingDf.head())
+
+        except Exception as e:
+            st.error(f"Error rotating data: {e}")
+
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
@@ -375,6 +381,7 @@ if uploadedFile is not None:
         ]
     )
 
+if workingDf is not None:
     # Preview
     with st.expander("Preview data (first 10 rows)"):
         st.dataframe(workingDf.head(10))
