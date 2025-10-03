@@ -347,6 +347,7 @@ if uploadedFile is not None:
 
     if workingDf is not None and st.button("Rotate data?"):
         try:
+            dfRaw = st.session_state.dfRaw
             # Rotate the dataframe
             dfRotated = dfRaw.T.reset_index(drop=False)
             dfRotated.columns = dfRotated.columns.astype(str)
@@ -381,7 +382,7 @@ if uploadedFile is not None:
         ]
     )
 
-if workingDf is not None:
+if dfRaw is not None:
     # Preview
     with st.expander("Preview data (first 10 rows)"):
         st.dataframe(workingDf.head(10))
