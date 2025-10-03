@@ -168,14 +168,22 @@ def visualizeData(df):
     categoricalColumns = df.select_dtypes(exclude=['number']).columns.tolist()
     return numericColumns, categoricalColumns
 
-def getPercentiles(df, dfPercent):
-    percentiles = {}
-    for col in dfPercent.index:
-        if col in df.columns:
-            percentiles[col] = dfPercent[col]
+def findPercentiles(df, dfPercent, choice):
+    results = {}
 
-    st.write("Percentiles found:", percentiles)
-    return percentiles
+    for col in dfPercent.index:
+        threshold = dfPercent[col]
+        if pd.api.types.is_numeric_dtype(df[col]):  # Only process numeric columns
+            if choice == "Under percentile":
+                count = (df[col] < threshold).sum()
+            elif choice == "Over percentile":
+                count = (df[col] > threshold).sum()
+            else:
+                count = 0
+            results[col] = count
+
+    return pd.DataFrame.from_dict(results, orient="index", columns=["Count"])
+
 def showMathInfo(df):
     numericCols = df.select_dtypes(include=['number'])
     if numericCols.shape[1] == 0:
@@ -393,13 +401,21 @@ if uploadedFile is not None:
 
             elif statOption == "Percentile":
                 userPercent = st.number_input("Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
+
                 if st.button("Show Percentile"):
                     percent = round(userPercent / 100.0, 4)
                     dfPercent = workingDf.quantile(percent, numeric_only=True)
-                    findPercentiles(dfPercent, dfPercent)
+
                     st.write(f"{userPercent}% percentile values")
                     st.dataframe(dfPercent)
 
+                    choice = st.radio("Show values relative to percentile:", 
+                                    ("None", "Under percentile", "Over percentile"))
+
+                    if choice != "None":
+                        results = findPercentiles(workingDf, dfPercent, choice)
+                        st.write(f"Number of values {choice.lower()} for each column:")
+                        st.dataframe(results)
             elif statOption == "All statistics":
                 st.dataframe(dfStats)
 
