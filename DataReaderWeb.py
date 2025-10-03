@@ -98,6 +98,7 @@ def getDateTime(copyDf):
     df.attrs['date_columns'] = dateColumns
     return df
 
+@st.cache_data
 def cleanData(mainDf):
     df = mainDf.copy()
 
@@ -210,6 +211,7 @@ def showCategoricalInfo(df):
 
     return catCols.describe()
 
+@st.cache_data
 def editData(df, action, **kwargs):
     # action is a string indicating what user wants
     # kwargs vary by action
@@ -342,7 +344,8 @@ if uploadedFile is not None:
     if st.button("Rotate data?"):
         try:
             # Rotate the dataframe
-            workingDf = rotateDataframe(workingDf)
+            workingDf = workingDf.T.reset_index(drop=False)
+            workingDf.columns = workingDf.columns.astype(str)
 
             # Save rotated DF to session state
             st.session_state.workingDf = workingDf  
