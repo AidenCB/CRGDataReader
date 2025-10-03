@@ -6,6 +6,255 @@ import seaborn as sns
 from datetime import datetime
 
 # -----------------------
+# Helper functions (ported from DataReader.py)
+# -----------------------
+
+def checkHeader(mainDf):
+    df = mainDf.copy()
+    if len(df) < 1:
+        return False
+
+    totalVals = len(df.iloc[0])
+    stringVals = sum(isinstance(val, str) for val in df.iloc[0])
+
+    if (stringVals / totalVals) < 0.85:
+        return False
+    else:
+        return True
+
+def dateTimeColumn(series):
+    s = series.copy()
+
+    dateFormats = ["%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y",
+                   "%m/%d/%y", "%m-%d-%y", "%d/%m/%y", "%d-%m-%y"]
+
+    timeFormats = ["%H:%M:%S", "%H:%M", "%H-%M-%S", "%H-%M",
+                   "%H.%M.%S", "%H.%M"]
+
+    genericFormats = [
+        "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m-%d-%Y %H:%M:%S", "%m-%d-%Y %H:%M",
+        "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M",
+        "%m/%d/%y %H:%M:%S", "%m/%d/%y %H:%M", "%m-%d-%y %H:%M:%S", "%m-%d-%y %H:%M",
+        "%d/%m/%y %H:%M:%S", "%d/%m/%y %H:%M", "%d-%m-%y %H:%M:%S", "%d-%m-%y %H:%M"
+    ]
+
+    successful = False
+    # Try generic formats first
+    for fmt in genericFormats + dateFormats + timeFormats:
+        try:
+            converted = pd.to_datetime(s, format=fmt, errors='coerce')
+            # if conversion produced some dates (not all NaT), accept
+            if not converted.isna().all():
+                # When convert, keep original non-convertible values as NaT
+                s = converted
+                successful = True
+                break
+        except Exception:
+            continue
+
+    # Fallback: try to let pandas infer format
+    if not successful:
+        try:
+            converted = pd.to_datetime(s, errors='coerce', infer_datetime_format=True)
+            if not converted.isna().all():
+                s = converted
+                successful = True
+        except Exception:
+            successful = False
+
+    if not successful:
+        return series
+    return s
+
+def getDateTime(copyDf):
+    df = copyDf.copy()
+    dateColumns = []
+    
+    # Only show multiselect if there are object columns
+    objectCols = df.select_dtypes(include=['object']).columns.tolist()
+    if objectCols and 'dateCols' not in st.session_state:
+        # Store user selection in session state to avoid re-asking
+        dateCols = st.multiselect(
+            "Select which columns should be read as dates:",
+            options=objectCols,
+            key='date_column_selector'
+        )
+        if dateCols:
+            st.session_state.dateCols = dateCols
+    
+    # Use stored selection if available
+    if 'dateCols' in st.session_state:
+        for col in st.session_state.dateCols:
+            if col in df.columns:
+                df[col] = pd.to_datetime(df[col], errors='coerce')
+                dateColumns.append(col)
+    
+    # Rename date columns
+    if len(dateColumns) == 1:
+        df = df.rename(columns={dateColumns[0]: 'date'})
+    elif len(dateColumns) > 1:
+        df = df.rename(columns={dateColumns[0]: 'date1'})
+    
+    df.attrs['date_columns'] = dateColumns
+    return df
+
+def cleanData(mainDf):
+    df = mainDf.copy()
+
+    # Remove commas from numbers and replacing with periods
+    for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
+        df[column] = df[column].str.replace(',', '.', regex=True) 
+        # Check for "/", "-" 
+        if df[column].str.contains(r'[\/\-]').any():
+            df[column] = dateTimeColumn(df[column])
+
+    # Convert strings to numbers
+    # Do it FIRST because it might convert numbers to date incorrectly otherwise
+    for column in df.select_dtypes(include="object").columns:
+        converted = pd.to_numeric(df[column], errors='coerce')
+        # Does NOT have NaN, convert to numeric
+        if not (converted.isna().all()):
+            df[column] = converted 
+
+
+    # Convert strings to dates
+    df = getDateTime(df)
+
+    # Replace common placeholders with NaN
+    placeholders = [-999, 999, -9, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200]
+    for col in df.columns:
+        for pch in placeholders:
+            df[col] = df[col].replace(to_replace=pch, value=np.nan)
+
+    # Drop rows/columns with >= 75% missing values 
+    df = df.dropna(axis=0, thresh=(len(df.columns) * .2))
+    df = df.dropna(axis=1, thresh=(len(df.columns) * .2))
+
+    # Clean string columns: remove special characters, lowercase
+    for column in df.select_dtypes(include="object").columns:
+        if pd.api.types.is_string_dtype(df[column]):
+            df[column] = df[column].str.replace(r'[^\w\s]', '', regex=True)
+            df[column] = df[column].str.lower()
+
+    return df
+
+def displayDates(df):
+    # Numeric columns to aggregate
+    numericColumns = df.select_dtypes(include=['number']).columns
+    output = {}
+
+    # Collect all datetime columns
+    dateCols = df.select_dtypes(include=['datetime64']).columns.tolist()
+    
+    if not dateCols:
+        return None
+
+    for col in dateCols:
+        # Group by exact date
+        output[col] = df.groupby(col)[numericColumns].mean()
+
+    return output
+
+
+
+def displayUniques(df):
+    uniques = {}
+    for column in df.columns:
+        uniques[column] = df[column].unique()
+    return uniques
+
+def visualizeData(df):
+    # Note: In Streamlit we will call visual functions directly in UI.
+    # This helper returns list of numeric columns and categorical columns
+    numericColumns = df.select_dtypes(include=['number']).columns.tolist()
+    categoricalColumns = df.select_dtypes(exclude=['number']).columns.tolist()
+    return numericColumns, categoricalColumns
+
+def showMathInfo(df):
+    numericCols = df.select_dtypes(include=['number'])
+    if numericCols.shape[1] == 0:
+        st.warning("No numeric columns found in the dataset.")
+        return None
+
+    dfStats = numericCols.describe()
+    return dfStats
+
+        
+def showCategoricalInfo(df):
+    catCols = df.select_dtypes(include=['object', 'category'])
+    if catCols.shape[1] == 0:
+        st.warning("No categorical columns found in the dataset.")
+        return None
+
+    return catCols.describe()
+
+def editData(df, action, **kwargs):
+    # action is a string indicating what user wants
+    # kwargs vary by action
+    dfLocal = df.copy()
+    if action == 'viewHead':
+        numShow = kwargs.get('numShow', 5)
+        return dfLocal.head(numShow)
+    elif action == 'renameColumn':
+        colToEdit = kwargs.get('colToEdit')
+        newColName = kwargs.get('newColName')
+        if colToEdit is None or newColName is None:
+            raise ValueError("renameColumn requires colToEdit and newColName")
+        dfLocal = dfLocal.rename(columns={colToEdit: newColName})
+        return dfLocal
+    elif action == 'deleteColumn':
+        colToDelete = kwargs.get('colToDelete')
+        if colToDelete in dfLocal.columns:
+            dfLocal = dfLocal.drop(columns=[colToDelete])
+            return dfLocal
+        else:
+            raise KeyError(f"Column {colToDelete} not found")
+    elif action == 'changeDatatype':
+        colToChange = kwargs.get('colToChange')
+        dtypeChoice = kwargs.get('dtypeChoice')  # one of: 'int','float','string','date'
+
+        if colToChange not in dfLocal.columns:
+            raise KeyError(f"Column {colToChange} not found")
+
+        dtype_map = {
+            'int': lambda x: pd.to_numeric(x, errors='coerce').astype('Int64'),
+            'float': lambda x: pd.to_numeric(x, errors='coerce').astype(float),
+            'string': lambda x: x.astype(str),
+            'date': lambda x: pd.to_datetime(x, errors='coerce')
+        }
+        dfLocal[colToChange] = dtype_map[dtypeChoice](dfLocal[colToChange])
+        return dfLocal
+    elif action == "changeDate":
+        colToEdit = kwargs.get('colToEdit')
+        components = kwargs.get('components', [])  # list of strings like ['year','month','day','hour','minute','second']
+
+        if colToEdit not in dfLocal.columns:
+            raise KeyError(f"Column {colToEdit} not found")
+
+        if not pd.api.types.is_datetime64_any_dtype(dfLocal[colToEdit]):
+            raise TypeError(f"Column {colToEdit} is not datetime type")
+
+        for comp in components:
+            if comp == 'year':
+                dfLocal[f"{colToEdit}_year"] = dfLocal[colToEdit].dt.year
+            elif comp == 'month':
+                dfLocal[f"{colToEdit}_month"] = dfLocal[colToEdit].dt.month
+            elif comp == 'day':
+                dfLocal[f"{colToEdit}_day"] = dfLocal[colToEdit].dt.day
+            elif comp == 'hour':
+                dfLocal[f"{colToEdit}_hour"] = dfLocal[colToEdit].dt.hour
+            elif comp == 'minute':
+                dfLocal[f"{colToEdit}_minute"] = dfLocal[colToEdit].dt.minute
+            elif comp == 'second':
+                dfLocal[f"{colToEdit}_second"] = dfLocal[colToEdit].dt.second
+            else:
+                raise ValueError(f"Unknown component {comp}")
+        return dfLocal
+
+    else:
+        raise ValueError("Unknown action")
+
+# -----------------------
 # Streamlit UI and mapping all functions
 # -----------------------
 
@@ -367,252 +616,3 @@ if uploadedFile is not None:
 
     # Update session state workingDf
     st.session_state.workingDf = workingDf
-# -----------------------
-# Helper functions (ported from DataReader.py)
-# -----------------------
-
-def checkHeader(mainDf):
-    df = mainDf.copy()
-    if len(df) < 1:
-        return False
-
-    totalVals = len(df.iloc[0])
-    stringVals = sum(isinstance(val, str) for val in df.iloc[0])
-
-    if (stringVals / totalVals) < 0.85:
-        return False
-    else:
-        return True
-
-def dateTimeColumn(series):
-    s = series.copy()
-
-    dateFormats = ["%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y",
-                   "%m/%d/%y", "%m-%d-%y", "%d/%m/%y", "%d-%m-%y"]
-
-    timeFormats = ["%H:%M:%S", "%H:%M", "%H-%M-%S", "%H-%M",
-                   "%H.%M.%S", "%H.%M"]
-
-    genericFormats = [
-        "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m-%d-%Y %H:%M:%S", "%m-%d-%Y %H:%M",
-        "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M",
-        "%m/%d/%y %H:%M:%S", "%m/%d/%y %H:%M", "%m-%d-%y %H:%M:%S", "%m-%d-%y %H:%M",
-        "%d/%m/%y %H:%M:%S", "%d/%m/%y %H:%M", "%d-%m-%y %H:%M:%S", "%d-%m-%y %H:%M"
-    ]
-
-    successful = False
-    # Try generic formats first
-    for fmt in genericFormats + dateFormats + timeFormats:
-        try:
-            converted = pd.to_datetime(s, format=fmt, errors='coerce')
-            # if conversion produced some dates (not all NaT), accept
-            if not converted.isna().all():
-                # When convert, keep original non-convertible values as NaT
-                s = converted
-                successful = True
-                break
-        except Exception:
-            continue
-
-    # Fallback: try to let pandas infer format
-    if not successful:
-        try:
-            converted = pd.to_datetime(s, errors='coerce', infer_datetime_format=True)
-            if not converted.isna().all():
-                s = converted
-                successful = True
-        except Exception:
-            successful = False
-
-    if not successful:
-        return series
-    return s
-
-def getDateTime(copyDf):
-    df = copyDf.copy()
-    dateColumns = []
-    
-    # Only show multiselect if there are object columns
-    objectCols = df.select_dtypes(include=['object']).columns.tolist()
-    if objectCols and 'dateCols' not in st.session_state:
-        # Store user selection in session state to avoid re-asking
-        dateCols = st.multiselect(
-            "Select which columns should be read as dates:",
-            options=objectCols,
-            key='date_column_selector'
-        )
-        if dateCols:
-            st.session_state.dateCols = dateCols
-    
-    # Use stored selection if available
-    if 'dateCols' in st.session_state:
-        for col in st.session_state.dateCols:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce')
-                dateColumns.append(col)
-    
-    # Rename date columns
-    if len(dateColumns) == 1:
-        df = df.rename(columns={dateColumns[0]: 'date'})
-    elif len(dateColumns) > 1:
-        df = df.rename(columns={dateColumns[0]: 'date1'})
-    
-    df.attrs['date_columns'] = dateColumns
-    return df
-
-def cleanData(mainDf):
-    df = mainDf.copy()
-
-    # Remove commas from numbers and replacing with periods
-    for column in df.select_dtypes(include="object").columns:  # Only doing operation on strings
-        df[column] = df[column].str.replace(',', '.', regex=True) 
-        # Check for "/", "-" 
-        if df[column].str.contains(r'[\/\-]').any():
-            df[column] = dateTimeColumn(df[column])
-
-    # Convert strings to numbers
-    # Do it FIRST because it might convert numbers to date incorrectly otherwise
-    for column in df.select_dtypes(include="object").columns:
-        converted = pd.to_numeric(df[column], errors='coerce')
-        # Does NOT have NaN, convert to numeric
-        if not (converted.isna().all()):
-            df[column] = converted 
-
-
-    # Convert strings to dates
-    df = getDateTime(df)
-
-    # Replace common placeholders with NaN
-    placeholders = [-999, 999, -9, 9999, 'NA', 'NaN', 'null', 'None', '', 'missing', -200]
-    for col in df.columns:
-        for pch in placeholders:
-            df[col] = df[col].replace(to_replace=pch, value=np.nan)
-
-    # Drop rows/columns with >= 75% missing values 
-    df = df.dropna(axis=0, thresh=(len(df.columns) * .2))
-    df = df.dropna(axis=1, thresh=(len(df.columns) * .2))
-
-    # Clean string columns: remove special characters, lowercase
-    for column in df.select_dtypes(include="object").columns:
-        if pd.api.types.is_string_dtype(df[column]):
-            df[column] = df[column].str.replace(r'[^\w\s]', '', regex=True)
-            df[column] = df[column].str.lower()
-
-    return df
-
-def displayDates(df):
-    # Numeric columns to aggregate
-    numericColumns = df.select_dtypes(include=['number']).columns
-    output = {}
-
-    # Collect all datetime columns
-    dateCols = df.select_dtypes(include=['datetime64']).columns.tolist()
-    
-    if not dateCols:
-        return None
-
-    for col in dateCols:
-        # Group by exact date
-        output[col] = df.groupby(col)[numericColumns].mean()
-
-    return output
-
-
-
-def displayUniques(df):
-    uniques = {}
-    for column in df.columns:
-        uniques[column] = df[column].unique()
-    return uniques
-
-def visualizeData(df):
-    # Note: In Streamlit we will call visual functions directly in UI.
-    # This helper returns list of numeric columns and categorical columns
-    numericColumns = df.select_dtypes(include=['number']).columns.tolist()
-    categoricalColumns = df.select_dtypes(exclude=['number']).columns.tolist()
-    return numericColumns, categoricalColumns
-
-def showMathInfo(df):
-    numericCols = df.select_dtypes(include=['number'])
-    if numericCols.shape[1] == 0:
-        st.warning("No numeric columns found in the dataset.")
-        return None
-
-    dfStats = numericCols.describe()
-    return dfStats
-
-        
-def showCategoricalInfo(df):
-    catCols = df.select_dtypes(include=['object', 'category'])
-    if catCols.shape[1] == 0:
-        st.warning("No categorical columns found in the dataset.")
-        return None
-
-    return catCols.describe()
-
-def editData(df, action, **kwargs):
-    # action is a string indicating what user wants
-    # kwargs vary by action
-    dfLocal = df.copy()
-    if action == 'viewHead':
-        numShow = kwargs.get('numShow', 5)
-        return dfLocal.head(numShow)
-    elif action == 'renameColumn':
-        colToEdit = kwargs.get('colToEdit')
-        newColName = kwargs.get('newColName')
-        if colToEdit is None or newColName is None:
-            raise ValueError("renameColumn requires colToEdit and newColName")
-        dfLocal = dfLocal.rename(columns={colToEdit: newColName})
-        return dfLocal
-    elif action == 'deleteColumn':
-        colToDelete = kwargs.get('colToDelete')
-        if colToDelete in dfLocal.columns:
-            dfLocal = dfLocal.drop(columns=[colToDelete])
-            return dfLocal
-        else:
-            raise KeyError(f"Column {colToDelete} not found")
-    elif action == 'changeDatatype':
-        colToChange = kwargs.get('colToChange')
-        dtypeChoice = kwargs.get('dtypeChoice')  # one of: 'int','float','string','date'
-
-        if colToChange not in dfLocal.columns:
-            raise KeyError(f"Column {colToChange} not found")
-
-        dtype_map = {
-            'int': lambda x: pd.to_numeric(x, errors='coerce').astype('Int64'),
-            'float': lambda x: pd.to_numeric(x, errors='coerce').astype(float),
-            'string': lambda x: x.astype(str),
-            'date': lambda x: pd.to_datetime(x, errors='coerce')
-        }
-        dfLocal[colToChange] = dtype_map[dtypeChoice](dfLocal[colToChange])
-        return dfLocal
-    elif action == "changeDate":
-        colToEdit = kwargs.get('colToEdit')
-        components = kwargs.get('components', [])  # list of strings like ['year','month','day','hour','minute','second']
-
-        if colToEdit not in dfLocal.columns:
-            raise KeyError(f"Column {colToEdit} not found")
-
-        if not pd.api.types.is_datetime64_any_dtype(dfLocal[colToEdit]):
-            raise TypeError(f"Column {colToEdit} is not datetime type")
-
-        for comp in components:
-            if comp == 'year':
-                dfLocal[f"{colToEdit}_year"] = dfLocal[colToEdit].dt.year
-            elif comp == 'month':
-                dfLocal[f"{colToEdit}_month"] = dfLocal[colToEdit].dt.month
-            elif comp == 'day':
-                dfLocal[f"{colToEdit}_day"] = dfLocal[colToEdit].dt.day
-            elif comp == 'hour':
-                dfLocal[f"{colToEdit}_hour"] = dfLocal[colToEdit].dt.hour
-            elif comp == 'minute':
-                dfLocal[f"{colToEdit}_minute"] = dfLocal[colToEdit].dt.minute
-            elif comp == 'second':
-                dfLocal[f"{colToEdit}_second"] = dfLocal[colToEdit].dt.second
-            else:
-                raise ValueError(f"Unknown component {comp}")
-        return dfLocal
-
-    else:
-        raise ValueError("Unknown action")
-
