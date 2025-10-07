@@ -69,16 +69,6 @@ def dateTimeColumn(series):
         except Exception:
             continue
 
-    # Fallback: try to let pandas infer format
-    if not successful:
-        try:
-            converted = pd.to_datetime(s, errors='coerce')
-            if not converted.isna().all():
-                s = converted
-                successful = True
-        except Exception:
-            successful = False
-
     if not successful:
         return series
     return s
@@ -111,9 +101,26 @@ def getDateTime(copyDf):
         df = df.rename(columns={dateColumns[0]: 'date'})
     elif len(dateColumns) > 1:
         df = df.rename(columns={dateColumns[0]: 'date1'})
+        return df
+
+@st.cache_data
+def displayDates(df):
+    # Numeric columns to aggregate
+    numericColumns = df.select_dtypes(include=['number']).columns
+    output = {}
+
+    # Collect all datetime columns
+    dateCols = df.select_dtypes(include=['datetime64']).columns.tolist()
     
-    df.attrs['date_columns'] = dateColumns
-    return df
+    if not dateCols:
+        return None
+
+    for col in dateCols:
+        # Group by exact date
+        output[col] = df.groupby(col)[numericColumns].mean()
+
+    return output
+
 
 def cleanData(mainDf):
     df = mainDf.copy()
@@ -156,23 +163,6 @@ def cleanData(mainDf):
 
     return df
 
-@st.cache_data
-def displayDates(df):
-    # Numeric columns to aggregate
-    numericColumns = df.select_dtypes(include=['number']).columns
-    output = {}
-
-    # Collect all datetime columns
-    dateCols = df.select_dtypes(include=['datetime64']).columns.tolist()
-    
-    if not dateCols:
-        return None
-
-    for col in dateCols:
-        # Group by exact date
-        output[col] = df.groupby(col)[numericColumns].mean()
-
-    return output
 
 @st.cache_data
 def displayUniques(df):
@@ -212,8 +202,6 @@ def findPercentiles(df, dfPercent, choice):
 
     return pd.DataFrame(results).T
 
-
-
 def showMathInfo(df):
     numericCols = df.select_dtypes(include=['number'])
     if numericCols.shape[1] == 0:
@@ -230,6 +218,16 @@ def showCategoricalInfo(df):
         return None
 
     return catCols.describe()
+
+def saveStatistics(df, statistic):
+    if df is not None and not df.empty:
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label=f"💾 Download {st.session_state.filename + statistic}.csv",
+            data=csv,
+            file_name=f"{st.session_state.filename + statistic}.csv",
+            mime="text/csv"
+        )
 
 # Menu Functions
 def editData(df, action, **kwargs):
@@ -304,22 +302,103 @@ st.set_page_config(page_title="DataReader Web", layout="wide")
 st.title("Datareader Web App")
 st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
 
+st.sidebar.markdown(
+    """
+    <div style="display: flex; align-items: center;">
+        <img src="https://your-image-url.png" width="60" style="margin-right: 10px; border-radius: 8px;">
+        <h2 style="color: white; margin: 0;">DataReader</h2>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+Ramapo Branding Theme Overrides ---
+st.markdown("""
+    <style>
+    /* --- Sidebar --- */
+    [data-testid="stSidebar"] > div:first-child {
+        background-color: #862633;   /* Ramapo maroon */
+    }
+    [data-testid="stSidebar"] {
+        color: #FFFFFF;
+    }
+    [data-testid="stSidebarNav"] li div {
+        color: #FFFFFF !important;
+    }
+
+    /* --- Main content area --- */
+    [data-testid="stAppViewContainer"] {
+        background-color: #25282A;   /* black background */
+        color: #FFFFFF;
+    }
+
+    /* --- Buttons --- */
+    .stButton > button {
+        background-color: #C41E1E;   /* red */
+        color: #FFFFFF;
+        border: none;
+        border-radius: 6px;
+        padding: 0.5em 1em;
+        font-weight: 600;
+    }
+    .stButton > button:hover {
+        background-color: #A42228;   /* darker red on hover */
+        color: #FFFFFF;
+        transform: scale(1.02);
+        transition: all 0.2s ease-in-out;
+    }
+
+    /* --- File uploader / widgets --- */
+    div[data-testid="stFileUploader"] {
+        background-color: #313436;
+        border-radius: 6px;
+        padding: 0.5em;
+    }
+
+    /* --- Dataframes --- */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #313436;
+        border-radius: 6px;
+        overflow: hidden;
+    }
+
+    /* --- Remove default toolbar on dataframes --- */
+    [data-testid="stElementToolbar"] {
+        display: none;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+
 # File uploader
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
 
-# Reset / Clear session button
-if st.button("Reset Data"):
-    for key in ["dfRaw", "workingDf"]:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.success("Session state cleared. Upload a new file to start again.")
+# # Reset / Clear session button
+# if st.button("Reset Data"):
+#     for key in ["dfRaw", "workingDf"]:
+#         if key in st.session_state:
+#             del st.session_state[key]
+#     st.success("Session state cleared. Upload a new file to start again.")
 
+
+# Main site loop
 if uploadedFile is not None:
-    dfRaw = None
-    workingDf = None
+
+    # Landing Page 
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio("Go to:", ["Landing Page", "DataReader Tool"])
+
+    if page == "Landing Page":
+        st.title("Welcome to DataReader Web")
+        st.write("This web app allows you to upload, clean, analyze, and visualize datasets easily.")
+        st.write("Navigate to 'DataReader Tool' from the sidebar to begin working with your data.")
+        dfRaw = None
+        workingDf = None
+        st.stop()  # Prevents rest of the script from running until they switch pages
+
 
     # Loads file, cleans data, and only reloads during new upload
-    if st.session_state.get('workingDf') is None:
+    if page == "DataReader Tool" and st.session_state.get('workingDf') is None:
         try:
             if uploadedFile.name.endswith((".csv", ".txt")):
                 dfRaw = pd.read_csv(uploadedFile, header=None) 
@@ -331,7 +410,7 @@ if uploadedFile is not None:
             st.success("File uploaded successfully.")
 
             # Store original filename
-            dfRaw.attrs['filename'] = uploadedFile.name
+            st.session_state.filename = uploadedFile.name.rsplit(".", 1)[0]
             st.session_state.dfRaw = dfRaw.copy()
             
             # Clean only once
@@ -346,12 +425,16 @@ if uploadedFile is not None:
     if workingDf is not None and st.button("Rotate data?"):
         try:
             dfRaw = st.session_state.dfRaw
-            # Rotate the dataframe
-            workingDf = dfRaw.T.reset_index(drop=False)
-            workingDf.columns = workingDf.columns.astype(str)
 
-            # Run cleaning
-            st.session_state.workingDf = cleanData(workingDf)
+            # --- Rotate safely ---
+            rotated = dfRaw.T.copy().reset_index(drop=True)
+
+            # Use the first transposed row as new column headers
+            rotated.columns = rotated.iloc[0].astype(str)
+            rotated = rotated.drop(rotated.index[0]).reset_index(drop=True)
+
+            # Clean the rotated data
+            st.session_state.workingDf = cleanData(rotated)
 
             # Success message with placeholder (can be cleared)
             msg_placeholder = st.empty()
@@ -362,7 +445,6 @@ if uploadedFile is not None:
 
         except Exception as e:
             st.error(f"Error rotating data: {e}")
-
 
     st.sidebar.subheader("Main Menu")
     mainMenu = st.sidebar.selectbox(
@@ -379,17 +461,16 @@ if uploadedFile is not None:
         ]
     )
 
-    workingDf = st.session_state.get("workingDf")
-
     # Preview
-    with st.expander("Preview data (first 10 rows)"):
+    with st.expander("Preview data"):
         st.dataframe(workingDf.head(10))
 
     # Numeric Statistics 
     if mainMenu == "Statistics":
         catCols = workingDf.select_dtypes(exclude=['object']).columns.tolist()
         numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
-        if catCols and st.button("Categorical Statistics"):
+        statOption = st.selectbox("Choose statistics type", ["Categorical", "Numeric"])
+        if catCols and statOption == "Categorical":
             try:
                 st.subheader("Categorical Statistics")
                 catStats = showCategoricalInfo(workingDf)
@@ -404,6 +485,7 @@ if uploadedFile is not None:
                     uniqueCounts = workingDf[catCols].nunique()
                     st.write("Number of unique values per column:")
                     st.dataframe(uniqueCounts)
+                    saveStatistics(uniqueCounts, "_uniqueCounts")
 
                 # Most frequent values
                 elif statOption == "Most frequent values":
@@ -411,6 +493,7 @@ if uploadedFile is not None:
                     topFreq = workingDf[colChoice].value_counts().head(10)
                     st.write(f"Top 10 most frequent values for '{colChoice}':")
                     st.dataframe(topFreq)
+                    saveStatistics(topFreq, f"_{colChoice}_mostFrequent")
 
                 # Least frequent values
                 elif statOption == "Least frequent values":
@@ -418,15 +501,17 @@ if uploadedFile is not None:
                     lowFreq = workingDf[colChoice].value_counts().tail(10)
                     st.write(f"10 least frequent values for '{colChoice}':")
                     st.dataframe(lowFreq)
+                    saveStatistics(lowFreq, f"_{colChoice}_leastFrequent")
 
                 # All statistics (summary view)
                 elif statOption == "All statistics":
                     st.write("Full categorical statistics:")
                     st.dataframe(catStats)
+                    saveStatistics(catStats, "_categoricalStatistics")
 
             except Exception as e:
                 st.error(str(e))
-        if numericCols and st.button("Numeric Statistics"):
+        if numericCols and statOption == "Numeric":
             try:
                 st.subheader("Numeric Statistics")
                 dfStats = showMathInfo(workingDf)
@@ -442,8 +527,10 @@ if uploadedFile is not None:
                     if colChoice == "All":
                         st.write("Count of non-null values per column:")
                         st.write(dfStats.loc['count'])
+                        saveStatistics(dfStats.loc[['count']], "_countPerColumn")
                     else:
                         st.write(f"Count for column '{colChoice}': {dfStats.at['count', colChoice]}")
+                        saveStatistics(pd.DataFrame({colChoice: [dfStats.at['count', colChoice]]}), f"_{colChoice}_count")
 
                 # Mean
                 elif statOption == "Mean":
@@ -451,8 +538,10 @@ if uploadedFile is not None:
                     if colChoice == "All":
                         st.write("Mean per column:")
                         st.write(dfStats.loc['mean'])
+                        saveStatistics(dfStats.loc[['mean']], "_meanPerColumn")
                     else:
                         st.write(f"Mean for column '{colChoice}': {dfStats.at['mean', colChoice]}")
+                        saveStatistics(pd.DataFrame({colChoice: [dfStats.at['mean', colChoice]]}), f"_{colChoice}_mean")
 
                 # Standard Deviation
                 elif statOption == "Std":
@@ -460,8 +549,10 @@ if uploadedFile is not None:
                     if colChoice == "All":
                         st.write("Standard deviation per column:")
                         st.write(dfStats.loc['std'])
+                        saveStatistics(dfStats.loc[['std']], "_stdPerColumn")
                     else:
                         st.write(f"Standard deviation for column '{colChoice}': {dfStats.at['std', colChoice]}")
+                        saveStatistics(dfStats.loc[['std']], "_stdPerColumn")
                 # Min/Max Rows 
                 elif statOption == "Min/Max rows":
                     colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
@@ -474,11 +565,13 @@ if uploadedFile is not None:
                         if not minRow.empty:
                             st.write("Min row(s):")
                             st.dataframe(minRow)
+                            saveStatistics(minRow, f"_{column}_minRow")
                         else:
                             st.write("No min row found")
                         if not maxRow.empty:
                             st.write("Max row(s):")
                             st.dataframe(maxRow)
+                            saveStatistics(maxRow, f"_{column}_maxRow")
                         else:
                             st.write("No max row found")
                     if colChoice == "All":
@@ -517,6 +610,7 @@ if uploadedFile is not None:
                             )
                             st.write(f"Number of values {choice.lower()} for each column:")
                             st.dataframe(results)
+                            saveStatistics(results, f"_values_{choice.split()[0].lower()}Percentile")
                 # All Statistics
                 elif statOption == "All statistics":
                     st.dataframe(dfStats)
@@ -643,8 +737,6 @@ if uploadedFile is not None:
                     st.success("Datetime components extracted")
                     st.dataframe(workingDf.head())
 
-            # ---------- Visualize Data ----------
-
     # Visualize Data
     elif mainMenu == "Visualize Data":
         st.subheader("Visualize data")
@@ -720,8 +812,8 @@ if uploadedFile is not None:
 
         # Default = original + "_edited.csv"
         defaultFilename = "export.csv"
-        if "dfRaw" in st.session_state and "filename" in st.session_state.dfRaw.attrs:
-            base = st.session_state.dfRaw.attrs["filename"].rsplit(".", 1)[0]
+        if "dfRaw" in st.session_state and "filename" in st.session_state.filename:
+            base = st.session_state.filename
             defaultFilename = f"{base}_edited.csv"
 
         # Text input so user can rename before downloading
