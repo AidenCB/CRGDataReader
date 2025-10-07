@@ -298,19 +298,32 @@ def editData(df, action, **kwargs):
 
 # Streamlit UI and mapping all functions
 
-st.set_page_config(page_title="DataReader Web", layout="wide")
+st.set_page_config(page_title="DataReader Web", layout="wide", page_icon="images/RamapoArch.png")
+
+st.markdown("""
+    <style>
+    [data-testid="stHeader"] {
+        background: #862633; /* Ramapo maroon */
+        height: 70px;
+    }
+    [data-testid="stHeader"]::before {
+        content: "";
+        background-image: url("https://github.com/AidenCB/CRGDataReader/blob/289da0a6dfc68c444e1be72eac461f70bef639f9/images/RamapoArch.png?raw=true");
+        background-size: contain;
+        background-repeat: no-repeat;
+        background-position: left center;
+        position: absolute;
+        top: 10px;
+        left: 20px;
+        height: 50px;
+        width: 200px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+
 st.title("Datareader Web App")
 st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
-
-st.sidebar.markdown(
-    """
-    <div style="display: flex; align-items: center;">
-        <img src="https://RamapoArch.png" width="60" style="margin-right: 10px; border-radius: 8px;">
-        <h2 style="color: white; margin: 0;">DataReader</h2>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
 
 # Ramapo Branding Theme Overrides
 st.markdown("""
@@ -369,7 +382,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-
 # File uploader
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
 
@@ -380,25 +392,26 @@ uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "
 #             del st.session_state[key]
 #     st.success("Session state cleared. Upload a new file to start again.")
 
+# Landing Page 
+if "show_tool" not in st.session_state or uploadedFile is None:
+    st.session_state.show_tool = False
 
 # Main site loop
-if uploadedFile is not None:
+if uploadedFile is not None or st.session_state.get('show_tool') == True:
 
-    # Landing Page 
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to:", ["Landing Page", "DataReader Tool"])
-
-    if page == "Landing Page":
+    if st.session_state.show_tool == False:
         st.title("Welcome to DataReader Web")
         st.write("This web app allows you to upload, clean, analyze, and visualize datasets easily.")
-        st.write("Navigate to 'DataReader Tool' from the sidebar to begin working with your data.")
+        st.write("Click below to begin working with your dataset.")
+        if st.button("Start DataReader Tool"):
+            st.session_state.show_tool = True
+            st.rerun()
         dfRaw = None
         workingDf = None
-        st.stop()  # Prevents rest of the script from running until they switch pages
-
+        st.stop()  # Prevents rest of the script from running until they switch page
 
     # Loads file, cleans data, and only reloads during new upload
-    if page == "DataReader Tool" and st.session_state.get('workingDf') is None:
+    if st.session_state.get('workingDf') is None:
         try:
             if uploadedFile.name.endswith((".csv", ".txt")):
                 dfRaw = pd.read_csv(uploadedFile, header=None) 
