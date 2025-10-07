@@ -305,14 +305,14 @@ st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
 st.sidebar.markdown(
     """
     <div style="display: flex; align-items: center;">
-        <img src="https://your-image-url.png" width="60" style="margin-right: 10px; border-radius: 8px;">
+        <img src="https://RamapoArch.png" width="60" style="margin-right: 10px; border-radius: 8px;">
         <h2 style="color: white; margin: 0;">DataReader</h2>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-Ramapo Branding Theme Overrides ---
+# Ramapo Branding Theme Overrides
 st.markdown("""
     <style>
     /* --- Sidebar --- */
