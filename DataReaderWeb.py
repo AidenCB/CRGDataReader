@@ -5,10 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from datetime import datetime
 
-# -----------------------
-# Helper functions (ported from DataReader.py)
-# -----------------------
-
+# Helper functions 
 def checkHeader(mainDf):
     df = mainDf.copy()
     if len(df) < 1:
@@ -41,6 +38,7 @@ def setHeader(dfRaw):
         dfRaw.columns = [f"col_{i}" for i in range(len(dfRaw.columns))]
     return dfRaw
 
+@st.cache_data
 def dateTimeColumn(series):
     s = series.copy()
 
@@ -74,7 +72,7 @@ def dateTimeColumn(series):
     # Fallback: try to let pandas infer format
     if not successful:
         try:
-            converted = pd.to_datetime(s, errors='coerce', infer_datetime_format=True)
+            converted = pd.to_datetime(s, errors='coerce')
             if not converted.isna().all():
                 s = converted
                 successful = True
@@ -117,7 +115,6 @@ def getDateTime(copyDf):
     df.attrs['date_columns'] = dateColumns
     return df
 
-@st.cache_data
 def cleanData(mainDf):
     df = mainDf.copy()
 
@@ -159,6 +156,7 @@ def cleanData(mainDf):
 
     return df
 
+@st.cache_data
 def displayDates(df):
     # Numeric columns to aggregate
     numericColumns = df.select_dtypes(include=['number']).columns
@@ -176,6 +174,7 @@ def displayDates(df):
 
     return output
 
+@st.cache_data
 def displayUniques(df):
     uniques = {}
     for column in df.columns:
@@ -189,6 +188,7 @@ def visualizeData(df):
     categoricalColumns = df.select_dtypes(exclude=['number']).columns.tolist()
     return numericColumns, categoricalColumns
 
+@st.cache_data
 def findPercentiles(df, dfPercent, choice):
     results = {}
     numeric_df = df.select_dtypes(include=['number'])
@@ -231,7 +231,7 @@ def showCategoricalInfo(df):
 
     return catCols.describe()
 
-@st.cache_data
+# Menu Functions
 def editData(df, action, **kwargs):
     # action is a string indicating what user wants
     # kwargs vary by action
@@ -298,9 +298,7 @@ def editData(df, action, **kwargs):
     else:
         raise ValueError("Unknown action")
 
-# -----------------------
 # Streamlit UI and mapping all functions
-# -----------------------
 
 st.set_page_config(page_title="DataReader Web", layout="wide")
 st.title("Datareader Web App")
@@ -308,18 +306,20 @@ st.write("Created by Aiden Cabrera for the Ramapo Climate Research Group")
 
 # File uploader
 uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
-dfRaw = None
 
 # Reset / Clear session button
 if st.button("Reset Data"):
-    for key in ["lastFilename", "dfRaw", "workingDf"]:
+    for key in ["dfRaw", "workingDf"]:
         if key in st.session_state:
             del st.session_state[key]
     st.success("Session state cleared. Upload a new file to start again.")
 
 if uploadedFile is not None:
+    dfRaw = None
+    workingDf = None
+
     # Loads file, cleans data, and only reloads during new upload
-    if 'lastFilename' not in st.session_state or st.session_state.lastFilename != uploadedFile.name:
+    if st.session_state.get('workingDf') is None:
         try:
             if uploadedFile.name.endswith((".csv", ".txt")):
                 dfRaw = pd.read_csv(uploadedFile, header=None) 
@@ -331,7 +331,6 @@ if uploadedFile is not None:
             st.success("File uploaded successfully.")
 
             # Store original filename
-            st.session_state.lastFilename = uploadedFile.name
             dfRaw.attrs['filename'] = uploadedFile.name
             st.session_state.dfRaw = dfRaw.copy()
             
@@ -342,7 +341,6 @@ if uploadedFile is not None:
             st.error(f"Error reading file: {e}")
             st.session_state.workingDf = None
 
-    # Always work with session copy
     workingDf = st.session_state.get("workingDf")
 
     if workingDf is not None and st.button("Rotate data?"):
@@ -370,112 +368,161 @@ if uploadedFile is not None:
     mainMenu = st.sidebar.selectbox(
         "Select operation",
         [
-            "Numeric Statistics",
-            "Categorical Statistics",
+            "Statistics",
             "Datatypes",
             "Display Dates",
             "Display Uniques",
-            "Clean Data",
+            "Reset Data",
             "Edit Data",
             "Visualize Data",
             "Save / Export"
         ]
     )
 
-if dfRaw is not None:
+    workingDf = st.session_state.get("workingDf")
+
     # Preview
     with st.expander("Preview data (first 10 rows)"):
         st.dataframe(workingDf.head(10))
 
-    # ---------- Numeric Statistics ----------
-    if mainMenu == "Numeric Statistics":
+    # Numeric Statistics 
+    if mainMenu == "Statistics":
+        catCols = workingDf.select_dtypes(exclude=['object']).columns.tolist()
         numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
-        if not numericCols:
-            st.info("No numeric columns available")
-        else:
-            st.subheader("Numeric Statistics")
-            dfStats = showMathInfo(workingDf)
+        if catCols and st.button("Categorical Statistics"):
+            try:
+                st.subheader("Categorical Statistics")
+                catStats = showCategoricalInfo(workingDf)
 
-            statOption = st.radio(
-                "Choose a numeric statistic to view",
-                ["Count per column", "Mean", "Std", "Min/Max rows", "Percentile", "All statistics"]
-            )
-
-            if statOption == "Count per column":
-                st.write(dfStats.loc['count'])
-
-            elif statOption == "Mean":
-                st.write(dfStats.loc['mean'])
-
-            elif statOption == "Std":
-                st.write(dfStats.loc['std'])
-            # ---------- Min/Max Rows ----------
-            elif statOption == "Min/Max rows":
-                colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
-                def minMaxRow(column):
-                    minVal = dfStats.at['min', column]
-                    maxVal = dfStats.at['max', column]
-                    minRow = workingDf[workingDf[column] == minVal]
-                    maxRow = workingDf[workingDf[column] == maxVal]
-                    st.write(f"Column: {column}")
-                    if not minRow.empty:
-                        st.write("Min row(s):")
-                        st.dataframe(minRow)
-                    else:
-                        st.write("No min row found")
-                    if not maxRow.empty:
-                        st.write("Max row(s):")
-                        st.dataframe(maxRow)
-                    else:
-                        st.write("No max row found")
-                if colChoice == "All":
-                    for col in numericCols:
-                        minMaxRow(col)
-                else:
-                    minMaxRow(colChoice)
-            # ---------- Percentiles ----------
-            elif statOption == "Percentile":
-                userPercent = st.number_input(
-                    "Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1
+                statOption = st.radio(
+                    "Choose a categorical statistic to view",
+                    ["Unique counts", "Most frequent values", "Least frequent values", "All statistics"]
                 )
 
-                if st.button("Show Percentile"):
-                    percent = round(userPercent / 100.0, 4)
-                    dfPercent = workingDf.quantile(percent, numeric_only=True)
+                # Unique counts
+                if statOption == "Unique counts":
+                    uniqueCounts = workingDf[catCols].nunique()
+                    st.write("Number of unique values per column:")
+                    st.dataframe(uniqueCounts)
 
-                    # Save to session state
-                    st.session_state.dfPercent = dfPercent
-                    st.session_state.userPercent = userPercent
+                # Most frequent values
+                elif statOption == "Most frequent values":
+                    colChoice = st.selectbox("Select column to view most frequent values", catCols)
+                    topFreq = workingDf[colChoice].value_counts().head(10)
+                    st.write(f"Top 10 most frequent values for '{colChoice}':")
+                    st.dataframe(topFreq)
 
-                    st.write(f"{userPercent}% percentile values")
-                    st.dataframe(dfPercent)
+                # Least frequent values
+                elif statOption == "Least frequent values":
+                    colChoice = st.selectbox("Select column to view least frequent values", catCols)
+                    lowFreq = workingDf[colChoice].value_counts().tail(10)
+                    st.write(f"10 least frequent values for '{colChoice}':")
+                    st.dataframe(lowFreq)
 
-                # Only show radio if dfPercent exists
-                if "dfPercent" in st.session_state:
-                    choice = st.radio(
-                        "Show values relative to percentile:",
-                        ("None", "Under percentile", "Over percentile"),
-                        key="percentile_choice"
+                # All statistics (summary view)
+                elif statOption == "All statistics":
+                    st.write("Full categorical statistics:")
+                    st.dataframe(catStats)
+
+            except Exception as e:
+                st.error(str(e))
+        if numericCols and st.button("Numeric Statistics"):
+            try:
+                st.subheader("Numeric Statistics")
+                dfStats = showMathInfo(workingDf)
+
+                statOption = st.radio(
+                    "Choose a numeric statistic to view",
+                    ["Count per column", "Mean", "Std", "Min/Max rows", "Percentile", "All statistics"]
+                )
+
+                # Count per column
+                if statOption == "Count per column":
+                    colChoice = st.selectbox("Select column or choose All", ["All"] + numericCols)
+                    if colChoice == "All":
+                        st.write("Count of non-null values per column:")
+                        st.write(dfStats.loc['count'])
+                    else:
+                        st.write(f"Count for column '{colChoice}': {dfStats.at['count', colChoice]}")
+
+                # Mean
+                elif statOption == "Mean":
+                    colChoice = st.selectbox("Select column or choose All", ["All"] + numericCols)
+                    if colChoice == "All":
+                        st.write("Mean per column:")
+                        st.write(dfStats.loc['mean'])
+                    else:
+                        st.write(f"Mean for column '{colChoice}': {dfStats.at['mean', colChoice]}")
+
+                # Standard Deviation
+                elif statOption == "Std":
+                    colChoice = st.selectbox("Select column or choose All", ["All"] + numericCols)
+                    if colChoice == "All":
+                        st.write("Standard deviation per column:")
+                        st.write(dfStats.loc['std'])
+                    else:
+                        st.write(f"Standard deviation for column '{colChoice}': {dfStats.at['std', colChoice]}")
+                # Min/Max Rows 
+                elif statOption == "Min/Max rows":
+                    colChoice = st.selectbox("Select column for min/max or choose All", ["All"] + numericCols)
+                    def minMaxRow(column):
+                        minVal = dfStats.at['min', column]
+                        maxVal = dfStats.at['max', column]
+                        minRow = workingDf[workingDf[column] == minVal]
+                        maxRow = workingDf[workingDf[column] == maxVal]
+                        st.write(f"Column: {column}")
+                        if not minRow.empty:
+                            st.write("Min row(s):")
+                            st.dataframe(minRow)
+                        else:
+                            st.write("No min row found")
+                        if not maxRow.empty:
+                            st.write("Max row(s):")
+                            st.dataframe(maxRow)
+                        else:
+                            st.write("No max row found")
+                    if colChoice == "All":
+                        for col in numericCols:
+                            minMaxRow(col)
+                    else:
+                        minMaxRow(colChoice)
+                # Percentiles 
+                elif statOption == "Percentile":
+                    userPercent = st.number_input(
+                        "Percentile (0-100)", min_value=0.0, max_value=100.0, value=50.0, step=0.1
                     )
 
-                    if choice != "None":
-                        results = findPercentiles(
-                            workingDf, st.session_state.dfPercent, choice
+                    if st.button("Show Percentile"):
+                        percent = round(userPercent / 100.0, 4)
+                        dfPercent = workingDf.quantile(percent, numeric_only=True)
+
+                        # Save to session state
+                        st.session_state.dfPercent = dfPercent
+                        st.session_state.userPercent = userPercent
+
+                        st.write(f"{userPercent}% percentile values")
+                        st.dataframe(dfPercent)
+
+                    # Only show radio if dfPercent exists
+                    if "dfPercent" in st.session_state:
+                        choice = st.radio(
+                            "Show values relative to percentile:",
+                            ("None", "Under percentile", "Over percentile"),
+                            key="percentile_choice"
                         )
-                        st.write(f"Number of values {choice.lower()} for each column:")
-                        st.dataframe(results)
 
-            elif statOption == "All statistics":
-                st.dataframe(dfStats)
-
-    # ---------- Categorical Statistics ----------
-    elif mainMenu == "Categorical Statistics":
-        st.subheader("Categorical Statistics")
-        catStats = showCategoricalInfo(workingDf)
-        st.dataframe(catStats)
-
-
-    # ---------- Datatypes ----------
+                        if choice != "None":
+                            results = findPercentiles(
+                                workingDf, st.session_state.dfPercent, choice
+                            )
+                            st.write(f"Number of values {choice.lower()} for each column:")
+                            st.dataframe(results)
+                # All Statistics
+                elif statOption == "All statistics":
+                    st.dataframe(dfStats)
+            except Exception as e:
+                st.error(str(e))
+    # Datatypes
     elif mainMenu == "Datatypes":
         st.subheader("Column datatypes")
         st.write(workingDf.dtypes)
@@ -494,7 +541,7 @@ if dfRaw is not None:
                 except Exception as e:
                     st.error(str(e))
 
-    # ---------- Display Dates ----------
+    # Display Dates (if available)
     elif mainMenu == "Display Dates":
         st.subheader("Display date-grouped numeric means")
         dateOutputs = displayDates(workingDf)
@@ -505,7 +552,7 @@ if dfRaw is not None:
                 st.write(f"Group by {k}")
                 st.dataframe(v)
 
-    # ---------- Display Uniques ----------
+    # Display Uniques
     elif mainMenu == "Display Uniques":
         st.subheader("Unique values per column")
         uniques = displayUniques(workingDf)
@@ -513,17 +560,7 @@ if dfRaw is not None:
             st.write(f"{col} ({len(vals)} unique)")
             st.write(vals)
 
-    # ---------- Clean Data ----------
-    elif mainMenu == "Clean Data":
-        st.subheader("Clean data options")
-        st.write("Use these actions to clean the working data. Changes are applied to the working copy.")
-
-        if st.button("Reset working data to original upload"):
-            workingDf = st.session_state.workingDf
-            st.success("Reset complete")
-            st.dataframe(workingDf.head())
-
-    # ---------- Edit Data ----------
+    # Edit Data 
     elif mainMenu == "Edit Data":
         st.subheader("Edit data")
         editAction = st.selectbox("Choose edit action", ["View data", "Rename column", "Delete column", "Drop duplicates", "Sort by column", "Change Date"])
@@ -607,6 +644,8 @@ if dfRaw is not None:
                     st.dataframe(workingDf.head())
 
             # ---------- Visualize Data ----------
+
+    # Visualize Data
     elif mainMenu == "Visualize Data":
         st.subheader("Visualize data")
         numericCols, categoricalCols = visualizeData(workingDf)
@@ -666,22 +705,32 @@ if dfRaw is not None:
                 sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
                 st.pyplot(fig)
 
-    # ---------- Save / Export ----------
+    # Reset Data
+    elif mainMenu == "Reset Data":
+        st.write("Use these actions to clean the working data. Changes are applied to the working copy.")
+
+        if st.button("Reset working data to original upload"):
+            workingDf = st.session_state.dfRaw
+            st.success("Reset complete")
+            st.dataframe(workingDf.head())
+
+    # Save / Export 
     elif mainMenu == "Save / Export":
         st.subheader("Save or export working data")
-    
-        # Default export filename = original + "_edited.csv"
+
+        # Default = original + "_edited.csv"
         defaultFilename = "export.csv"
         if "dfRaw" in st.session_state and "filename" in st.session_state.dfRaw.attrs:
             base = st.session_state.dfRaw.attrs["filename"].rsplit(".", 1)[0]
             defaultFilename = f"{base}_edited.csv"
-    
+
         # Text input so user can rename before downloading
-        newFilename = st.text_input("Filename for download (then press enter)", defaultFilename, max_chars=20)
-    
+        newFilename = st.text_input("Filename for download", defaultFilename, max_chars=20)
+        st.button("Apply")
+
         # Convert working df to CSV
         csv = workingDf.to_csv(index=False).encode("utf-8")
-    
+
         # Download button
         st.download_button(
             label="Download CSV",
