@@ -18,7 +18,6 @@ Users can upload CSV, Excel, or TXT files, inspect and clean the data, perform s
 -  Converts numeric columns stored as strings to proper numeric types.
 -  Converts date columns automatically and allows user specification.
 -  Handles common placeholders for missing values (e.g., NA, -999, null).
--  Drops rows/columns with excessive missing values.
 
 ###  Data Exploration:
 -  Numeric statistics: count, mean, standard deviation, min/max, percentiles.
