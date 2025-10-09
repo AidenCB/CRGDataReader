@@ -27,7 +27,7 @@ def main():
         <style>
         [data-testid="stHeader"] {display: none;}  /* Hide the default black bar */
 
-        /* --- Custom Header --- */
+       /* Custom Header */
         .custom-header {
             background-color: #862633;  /* Ramapo maroon */
             display: flex;
@@ -41,11 +41,11 @@ def main():
             box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.3);
         }
 
-        /* --- File uploader outer container --- */
+        /* File uploader outer container */
         [data-testid="stFileUploader"] {
             background-color: #862633;  /* maroon outer layer */
-            max-width: 700px;
-            max-height: 400px;
+            max-width: 1200px;
+            gap: 2rem;
             padding: .5rem;
             border-radius: 10px;
             border: 2px solid #C41E1E;  /* red border accent */
@@ -53,23 +53,18 @@ def main():
             justify-content: center;
         }
 
-        /* --- File uploader inner box (black center) --- */
+        /* File uploader inner box (black center) */
         [data-testid="stFileUploader"] > div {
+            display: flex; 
             background-color: #000000 !important;  /* black center */
             border-radius: 8px;
             padding: 1rem !important;
+            gap: 10rem;
             width: 100%;
             color: white !important;
-        }
+            align-items: center;
 
-        /* Header Title */
-        .custom-header h2, .custom-header p {
-            color: white;
-            margin: 0;
-            text-align: center;
-        }
-
-        /* --- Selectboxes in header --- */
+        /* Selectboxes in header */
         div[data-baseweb="select"] > div {
             background-color: #C41E1E !important;
             color: white !important;
@@ -111,7 +106,7 @@ def main():
 
         /* Remove Streamlit’s default element toolbar */
         [data-testid="stElementToolbar"] {
-            display: none;
+            display: none !important;
         }
         </style>
         """, unsafe_allow_html=True)
@@ -124,7 +119,6 @@ def main():
     if uploadedFile is not None:
 
         dfRaw = st.session_state.get('dfRaw')
-        workingDf = st.session_state.get('workingDf')
 
         # Loads file, cleans data, and only reloads during new upload
         if st.session_state.get('workingDf') is None:
@@ -143,11 +137,9 @@ def main():
                 st.session_state.dfRaw = dfRaw.copy()
                 
                 # Clean only once
-                workingDf = dfRaw
                 workingDf = cleanData(dfRaw)
                 st.session_state.workingDf = workingDf
-    
-
+        
             except Exception as e:
                 st.error(f"Error reading file: {e}")
                 st.session_state.workingDf = None
@@ -176,6 +168,9 @@ def main():
             #         st.error(f"Error rotating data: {e}")
             
             # Preview
+        
+        workingDf = st.session_state.get('workingDf')
+
         with st.expander("Preview data"):
             st.dataframe(workingDf.head(10))
 
@@ -198,48 +193,7 @@ def main():
         if mainMenu == "Statistics":
             catCols = workingDf.select_dtypes(exclude=['object']).columns.tolist()
             numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
-            statOption = st.selectbox("Choose statistics type", ["Categorical", "Numeric"])
-            if catCols and statOption == "Categorical":
-                try:
-                    st.subheader("Categorical Statistics")
-                    catStats = showCategoricalInfo(workingDf)
-
-                    statOption = st.radio(
-                        "Choose a categorical statistic to view",
-                        ["Unique counts", "Most frequent values", "Least frequent values", "All statistics"]
-                    )
-
-                    # Unique counts
-                    if statOption == "Unique counts":
-                        uniqueCounts = workingDf[catCols].nunique()
-                        st.write("Number of unique values per column:")
-                        st.dataframe(uniqueCounts)
-                        saveStatistics(uniqueCounts, "_uniqueCounts")
-
-                    # Most frequent values
-                    elif statOption == "Most frequent values":
-                        colChoice = st.selectbox("Select column to view most frequent values", catCols)
-                        topFreq = workingDf[colChoice].value_counts().head(10)
-                        st.write(f"Top 10 most frequent values for '{colChoice}':")
-                        st.dataframe(topFreq)
-                        saveStatistics(topFreq, f"_{colChoice}_mostFrequent")
-
-                    # Least frequent values
-                    elif statOption == "Least frequent values":
-                        colChoice = st.selectbox("Select column to view least frequent values", catCols)
-                        lowFreq = workingDf[colChoice].value_counts().tail(10)
-                        st.write(f"10 least frequent values for '{colChoice}':")
-                        st.dataframe(lowFreq)
-                        saveStatistics(lowFreq, f"_{colChoice}_leastFrequent")
-
-                    # All statistics (summary view)
-                    elif statOption == "All statistics":
-                        st.write("Full categorical statistics:")
-                        st.dataframe(catStats)
-                        saveStatistics(catStats, "_categoricalStatistics")
-
-                except Exception as e:
-                    st.error(str(e))
+            statOption = st.selectbox("Choose statistics type", ["Numeric", "Categorical"])
             if numericCols and statOption == "Numeric":
                 try:
                     st.subheader("Numeric Statistics")
@@ -343,8 +297,51 @@ def main():
                     # All Statistics
                     elif statOption == "All statistics":
                         st.dataframe(dfStats)
+                        saveStatistics(dfStats, "_numericStatistics", rotate=False)
                 except Exception as e:
                     st.error(str(e))
+        
+            if catCols and statOption == "Categorical":
+                    try:
+                        st.subheader("Categorical Statistics")
+                        catStats = showCategoricalInfo(workingDf)
+
+                        statOption = st.radio(
+                            "Choose a categorical statistic to view",
+                            ["Unique counts", "Most frequent values", "Least frequent values", "All statistics"]
+                        )
+
+                        # Unique counts
+                        if statOption == "Unique counts":
+                            uniqueCounts = workingDf[catCols].nunique()
+                            st.write("Number of unique values per column:")
+                            st.dataframe(uniqueCounts)
+                            saveStatistics(uniqueCounts, "_uniqueCounts")
+
+                        # Most frequent values
+                        elif statOption == "Most frequent values":
+                            colChoice = st.selectbox("Select column to view most frequent values", catCols)
+                            topFreq = workingDf[colChoice].value_counts().head(10)
+                            st.write(f"Top 10 most frequent values for '{colChoice}':")
+                            st.dataframe(topFreq)
+                            saveStatistics(topFreq, f"_{colChoice}_mostFrequent")
+
+                        # Least frequent values
+                        elif statOption == "Least frequent values":
+                            colChoice = st.selectbox("Select column to view least frequent values", catCols)
+                            lowFreq = workingDf[colChoice].value_counts().tail(10)
+                            st.write(f"10 least frequent values for '{colChoice}':")
+                            st.dataframe(lowFreq)
+                            saveStatistics(lowFreq, f"_{colChoice}_leastFrequent")
+
+                        # All statistics (summary view)
+                        elif statOption == "All statistics":
+                            st.write("Full categorical statistics:")
+                            st.dataframe(catStats)
+                            saveStatistics(catStats, "_categoricalStatistics", rotate=False)
+
+                    except Exception as e:
+                        st.error(str(e))
         # Datatypes
         elif mainMenu == "Datatypes":
             st.subheader("Column datatypes")
@@ -447,84 +444,126 @@ def main():
                         st.success("Datetime components extracted")
                         st.dataframe(workingDf.head())
 
-        # Visualize Data
-        elif mainMenu == "Visualize Data":
-            selectVisual = st.select_box("Select visualization type", ["Display Dates", "Display Uniques", "Visualize data"])
-            if selectVisual == "Display Dates":
-                st.subheader("Display date-grouped numeric means")
-                dateOutputs = displayDates(workingDf)
-                if not dateOutputs:
-                    st.info("No date columns found")
-                else:
-                    for k, v in dateOutputs.items():
-                        st.write(f"Group by {k}")
-                        st.dataframe(v)
-                        saveStatistics(v, f"_dateGroupedBy_{k}")
-            elif selectVisual == "Display Uniques":
-                st.subheader("Unique values per column")
-                uniques = displayUniques(workingDf)
-                for col, vals in uniques.items():
-                    st.write(f"{col} ({len(vals)} unique)")
-                    st.write(vals)
-
-            elif selectVisual == "Visualize data":
-                st.subheader("Visualize data")
-                numericCols, categoricalCols = visualizeData(workingDf)
-                vizType = st.selectbox("Choose visualization", ["Histogram", "Boxplot", "Scatter", "Bar (categorical)", "Correlation heatmap"])
-                if vizType == "Histogram":
-                    if not numericCols:
-                        st.info("No numeric columns available")
+            # Visualize Data
+            elif mainMenu == "Visualize Data":
+                selectVisual = st.select_box("Select visualization type", ["Display Dates", "Display Uniques", "Visualize data"])
+                if selectVisual == "Display Dates":
+                    st.subheader("Display date-grouped numeric means")
+                    dateOutputs = displayDates(workingDf)
+                    if not dateOutputs:
+                        st.info("No date columns found")
                     else:
-                        colChoice = st.selectbox("Select numeric column", numericCols)
-                        bins = st.slider("Bins", min_value=5, max_value=200, value=20)
-                        fig, ax = plt.subplots()
-                        ax.hist(workingDf[colChoice].dropna(), bins=bins)
-                        ax.set_title(f"Histogram of {colChoice}")
-                        st.pyplot(fig)
+                        for k, v in dateOutputs.items():
+                            st.write(f"Group by {k}")
+                            st.dataframe(v)
+                            saveStatistics(v, f"_dateGroupedBy_{k}")
+                elif selectVisual == "Display Uniques":
+                    st.subheader("Unique values per column")
+                    uniques = displayUniques(workingDf)
+                    for col, vals in uniques.items():
+                        st.write(f"{col} ({len(vals)} unique)")
+                        st.write(vals)
 
-                elif vizType == "Boxplot":
-                    if not numericCols:
-                        st.info("No numeric columns available")
-                    else:
-                        colChoice = st.selectbox("Select numeric column", numericCols)
-                        fig, ax = plt.subplots()
-                        ax.boxplot(workingDf[colChoice].dropna())
-                        ax.set_title(f"Boxplot of {colChoice}")
-                        st.pyplot(fig)
+                elif selectVisual == "Visualize data":
+                    st.subheader("Visualize data")
 
-                elif vizType == "Scatter":
-                    if len(numericCols) < 2:
-                        st.info("Need at least two numeric columns for scatter plot")
-                    else:
-                        xCol = st.selectbox("X axis", numericCols)
-                        yCol = st.selectbox("Y axis", [c for c in numericCols if c != xCol])
-                        fig, ax = plt.subplots()
-                        ax.scatter(workingDf[xCol], workingDf[yCol])
-                        ax.set_xlabel(xCol)
-                        ax.set_ylabel(yCol)
-                        ax.set_title(f"Scatter: {xCol} vs {yCol}")
-                        st.pyplot(fig)
+                    numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
+                    categoricalCols = workingDf.select_dtypes(exclude=['number']).columns.tolist()
+                    vizType = st.selectbox("Choose visualization", ["Histogram", "Boxplot", "Scatter", "Bar (categorical)", "Correlation heatmap"])
 
-                elif vizType == "Bar (categorical)":
-                    if not categoricalCols:
-                        st.info("No categorical columns")
-                    else:
-                        colChoice = st.selectbox("Select categorical column", categoricalCols)
-                        counts = workingDf[colChoice].value_counts().head(50)
-                        fig, ax = plt.subplots(figsize=(8, 4))
-                        sns.barplot(x=counts.values, y=counts.index, ax=ax)
-                        ax.set_xlabel("Count")
-                        ax.set_ylabel(colChoice)
-                        st.pyplot(fig)
+                    if vizType == "Histogram":
+                        if not numericCols:
+                            st.info("No numeric columns available")
+                        else:
+                            colChoice = st.selectbox("Select numeric column", numericCols)
+                            numBins = st.slider("Bins", min_value=5, max_value=200, value=20)
+                            fig = px.histogram(
+                                workingDf,
+                                x=colChoice,
+                                nbins=numBins,
+                                title=f"Histogram of {colChoice}",
+                                color_discrete_sequence=["#C41E1E"]
+                            )
+                            fig.update_layout(
+                                template="plotly_dark",
+                                xaxis_title=colChoice,
+                                yaxis_title="Frequency"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
 
-                elif vizType == "Correlation heatmap":
-                    if len(numericCols) < 2:
-                        st.info("Need at least two numeric columns")
-                    else:
-                        corr = workingDf[numericCols].corr()
-                        fig, ax = plt.subplots(figsize=(10, 8))
-                        sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
-                        st.pyplot(fig)
+                    elif vizType == "Boxplot":
+                        if not numericCols:
+                            st.info("No numeric columns available")
+                        else:
+                            colChoice = st.selectbox("Select numeric column", numericCols)
+                            fig = px.box(
+                                workingDf,
+                                y=colChoice,
+                                title=f"Boxplot of {colChoice}",
+                                color_discrete_sequence=["#C41E1E"]
+                            )
+                            fig.update_layout(
+                                template="plotly_dark",
+                                yaxis_title=colChoice
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    elif vizType == "Scatter":
+                        if len(numericCols) < 2:
+                            st.info("Need at least two numeric columns for scatter plot")
+                        else:
+                            xCol = st.selectbox("X axis", numericCols)
+                            yCol = st.selectbox("Y axis", [c for c in numericCols if c != xCol])
+                            fig = px.scatter(
+                                workingDf,
+                                x=xCol,
+                                y=yCol,
+                                title=f"Scatter: {xCol} vs {yCol}",
+                                color_discrete_sequence=["#C41E1E"]
+                            )
+                            fig.update_traces(marker=dict(size=8, opacity=0.7))
+                            fig.update_layout(
+                                template="plotly_dark",
+                                xaxis_title=xCol,
+                                yaxis_title=yCol
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    elif vizType == "Bar (categorical)":
+                        if not categoricalCols:
+                            st.info("No categorical columns")
+                        else:
+                            colChoice = st.selectbox("Select categorical column", categoricalCols)
+                            valueCounts = workingDf[colChoice].value_counts().head(50)
+                            fig = px.bar(
+                                x=valueCounts.values,
+                                y=valueCounts.index,
+                                orientation="h",
+                                title=f"Top 50 Categories in {colChoice}",
+                                labels={"x": "Count", "y": colChoice},
+                                color_discrete_sequence=["#C41E1E"]
+                            )
+                            fig.update_layout(
+                                template="plotly_dark",
+                                yaxis=dict(autorange="reversed")
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+
+                    elif vizType == "Correlation heatmap":
+                        if len(numericCols) < 2:
+                            st.info("Need at least two numeric columns")
+                        else:
+                            corrMatrix = workingDf[numericCols].corr()
+                            fig = px.imshow(
+                                corrMatrix,
+                                text_auto=True,
+                                color_continuous_scale="RdBu_r",
+                                title="Correlation Heatmap",
+                                aspect="auto"
+                            )
+                            fig.update_layout(template="plotly_dark")
+                            st.plotly_chart(fig, use_container_width=True)
+
 
         # Reset Data
         elif mainMenu == "Reset Data":
@@ -723,13 +762,6 @@ def displayUniques(df):
         uniques[column] = df[column].unique()
     return uniques
 
-def visualizeData(df):
-    # Note: In Streamlit we will call visual functions directly in UI.
-    # This helper returns list of numeric columns and categorical columns
-    numericColumns = df.select_dtypes(include=['number']).columns.tolist()
-    categoricalColumns = df.select_dtypes(exclude=['number']).columns.tolist()
-    return numericColumns, categoricalColumns
-
 @st.cache_data
 def findPercentiles(df, dfPercent, choice):
     results = {}
@@ -771,8 +803,10 @@ def showCategoricalInfo(df):
 
     return catCols.describe()
 
-def saveStatistics(df, statistic):
+def saveStatistics(df, statistic, rotate=True):
     if df is not None and not df.empty:
+        if rotate:
+            df = df.T
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label=f"Download {st.session_state.filename + statistic}.csv",
