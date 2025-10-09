@@ -27,7 +27,7 @@ def main():
         <style>
         [data-testid="stHeader"] {display: none;}  /* Hide the default black bar */
 
-        /* Custom Header Container */
+        /* --- Custom Header --- */
         .custom-header {
             background-color: #862633;  /* Ramapo maroon */
             display: flex;
@@ -41,6 +41,27 @@ def main():
             box-shadow: 0px 2px 6px rgba(0, 0, 0, 0.3);
         }
 
+        /* --- File uploader outer container --- */
+        [data-testid="stFileUploader"] {
+            background-color: #862633;  /* maroon outer layer */
+            max-width: 700px;
+            max-height: 400px;
+            padding: .5rem;
+            border-radius: 10px;
+            border: 2px solid #C41E1E;  /* red border accent */
+            display: flex;
+            justify-content: center;
+        }
+
+        /* --- File uploader inner box (black center) --- */
+        [data-testid="stFileUploader"] > div {
+            background-color: #000000 !important;  /* black center */
+            border-radius: 8px;
+            padding: 1rem !important;
+            width: 100%;
+            color: white !important;
+        }
+
         /* Header Title */
         .custom-header h2, .custom-header p {
             color: white;
@@ -48,7 +69,7 @@ def main():
             text-align: center;
         }
 
-        /* Make Streamlit selectbox blend into header */
+        /* --- Selectboxes in header --- */
         div[data-baseweb="select"] > div {
             background-color: #C41E1E !important;
             color: white !important;
@@ -59,14 +80,14 @@ def main():
         div[data-baseweb="select"] svg {
             fill: white !important;
         }
-        
-        /* Main content area */
+
+        /* --- Main content area --- */
         [data-testid="stAppViewContainer"] {
-            background-color: #25282A;   /* black background */
+            background-color: #25282A;   /* dark background */
             color: #FFFFFF;
         }
 
-        /* Buttons */
+        /* --- Buttons --- */
         .stButton > button {
             background-color: #C41E1E;   /* red */
             color: #FFFFFF;
@@ -77,31 +98,24 @@ def main():
         }
         .stButton > button:hover {
             background-color: #A42228;   /* darker red on hover */
-            color: #FFFFFF;
             transform: scale(1.02);
             transition: all 0.2s ease-in-out;
         }
 
-        /* File uploader / widgets */
-        div[data-testid="stFileUploader"] {
-            background-color: #313436;
-            border-radius: 6px;
-            padding: 0.5em;
-        }
-
-        /* Dataframes */
+        /* --- Dataframes --- */
         [data-testid="stDataFrame"] {
             border: 1px solid #313436;
             border-radius: 6px;
             overflow: hidden;
         }
 
-        /* Remove default toolbar on dataframes  */
+        /* Remove Streamlit’s default element toolbar */
         [data-testid="stElementToolbar"] {
             display: none;
         }
         </style>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
 
     # File uploader
     uploadedFile = st.file_uploader("Upload CSV, Excel, or TXT file", type=["csv", "xlsx", "xls", "txt"])
