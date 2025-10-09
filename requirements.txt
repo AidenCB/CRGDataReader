@@ -1,8 +1,8 @@
 streamlit
 pandas
 numpy
-matplotlib
-seaborn
+plotly.graph_objects 
+plotly.express 
 openpyxl
 xlrd
 
