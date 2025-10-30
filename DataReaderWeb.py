@@ -602,9 +602,18 @@ def main():
         # Update session state workingDf
         st.session_state.workingDf = workingDf
 
+
+
 # Helper functions 
-def checkHeader(copyDf):
-    df = copyDf.copy()
+'''
+Name:   Checkheader
+Parameters: Raw Dataframe
+Desc.:  Scans the first line of the dataframe and 
+        checks the ratio of string:nonstring to 
+        determine if there is a header
+        Returns True is there is, or False if there is none
+'''
+def checkHeader(df):
     if len(df) < 1:
         return False
 
@@ -616,6 +625,12 @@ def checkHeader(copyDf):
     else:
         return True
 
+'''
+Name:   rowtoHeader
+Parameters: Raw Dataframe
+Desc:   Sets the first row of the dataframe as the header
+        Returns the dataframe
+'''
 def rowtoHeader(copyDf):
     df = copyDf.copy()
     # Convert first row values to lowercase if they are strings
