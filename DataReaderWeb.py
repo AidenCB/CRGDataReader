@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
+
 from datetime import datetime
 
 def main():
@@ -121,7 +120,7 @@ def main():
         dfRaw = st.session_state.get('dfRaw')
 
         # Loads file, cleans data, and only reloads during new upload
-        if st.session_state.get('workingDf') is None:
+        if st.session_state.get('workingDf') is None or st.button("Refresh Data"):
             try:
                 if uploadedFile.name.endswith((".csv", ".txt")):
                     dfRaw = pd.read_csv(uploadedFile, header=None) 
@@ -143,31 +142,6 @@ def main():
             except Exception as e:
                 st.error(f"Error reading file: {e}")
                 st.session_state.workingDf = None
-            # if workingDf is not None and st.button("Rotate data?"):
-            #     try:
-            #         dfRaw = st.session_state.dfRaw
-
-            #         # --- Rotate safely ---
-            #         rotated = dfRaw.T.copy().reset_index(drop=True)
-
-            #         # Use the first transposed row as new column headers
-            #         rotated.columns = rotated.iloc[0].astype(str)
-            #         rotated = rotated.drop(rotated.index[0]).reset_index(drop=True)
-
-            #         # Clean the rotated data
-            #         st.session_state.workingDf = cleanData(rotated)
-
-            #         # Success message with placeholder (can be cleared)
-            #         msg_placeholder = st.empty()
-            #         msg_placeholder.success("Data rotated, headers checked, and cleaned successfully.")
-
-            #         # Show new rotated + cleaned data
-            #         st.dataframe(st.session_state.workingDf.head())
-
-            #     except Exception as e:
-            #         st.error(f"Error rotating data: {e}")
-            
-            # Preview
         
         workingDf = st.session_state.get('workingDf')
 
@@ -297,7 +271,7 @@ def main():
                     # All Statistics
                     elif statOption == "All statistics":
                         st.dataframe(dfStats)
-                        saveStatistics(dfStats, "_numericStatistics", rotate=False)
+
                 except Exception as e:
                     st.error(str(e))
         
@@ -313,32 +287,31 @@ def main():
 
                         # Unique counts
                         if statOption == "Unique counts":
-                            uniqueCounts = workingDf[catCols].nunique()
+                            selectedOption = workingDf[catCols].nunique()
                             st.write("Number of unique values per column:")
-                            st.dataframe(uniqueCounts)
-                            saveStatistics(uniqueCounts, "_uniqueCounts")
+                            st.dataframe(selectedOption)
 
                         # Most frequent values
                         elif statOption == "Most frequent values":
                             colChoice = st.selectbox("Select column to view most frequent values", catCols)
-                            topFreq = workingDf[colChoice].value_counts().head(10)
+                            selectedOption = workingDf[colChoice].value_counts().head(10)
                             st.write(f"Top 10 most frequent values for '{colChoice}':")
-                            st.dataframe(topFreq)
-                            saveStatistics(topFreq, f"_{colChoice}_mostFrequent")
+                            st.dataframe(selectedOption)
 
                         # Least frequent values
                         elif statOption == "Least frequent values":
                             colChoice = st.selectbox("Select column to view least frequent values", catCols)
-                            lowFreq = workingDf[colChoice].value_counts().tail(10)
+                            selectedOption = workingDf[colChoice].value_counts().tail(10)
                             st.write(f"10 least frequent values for '{colChoice}':")
-                            st.dataframe(lowFreq)
-                            saveStatistics(lowFreq, f"_{colChoice}_leastFrequent")
+                            st.dataframe(selectedOption)
 
                         # All statistics (summary view)
                         elif statOption == "All statistics":
                             st.write("Full categorical statistics:")
-                            st.dataframe(catStats)
-                            saveStatistics(catStats, "_categoricalStatistics", rotate=False)
+                            st.dataframe(selectedOption)
+                        
+                        colToSave = st.selectbox("Select column to save", selectedOption.columns.tolist())
+                        saveStatistics(colToSave, f"_{colToSave}", rotate=False)
 
                     except Exception as e:
                         st.error(str(e))
@@ -602,17 +575,13 @@ def main():
         # Update session state workingDf
         st.session_state.workingDf = workingDf
 
-
-
-# Helper functions 
-'''
-Name:   Checkheader
-Parameters: Raw Dataframe
-Desc.:  Scans the first line of the dataframe and 
-        checks the ratio of string:nonstring to 
-        determine if there is a header
-        Returns True is there is, or False if there is none
-'''
+# Helper function for setHeader()
+# Name:   Checkheader
+# Parameters: Raw Dataframe
+# Desc.:  cans the first line of the dataframe and 
+#         checks the ratio of string:nonstring to 
+#         determine if there is a header
+#         Returns True is there is, or False if there is none
 def checkHeader(df):
     if len(df) < 1:
         return False
@@ -625,12 +594,11 @@ def checkHeader(df):
     else:
         return True
 
-'''
-Name:   rowtoHeader
-Parameters: Raw Dataframe
-Desc:   Sets the first row of the dataframe as the header
-        Returns the dataframe
-'''
+# Helper function for setHeader()
+# Name:    rowtoHeader
+# Parameters: Raw Dataframe
+# Desc:   Helper function to set the first row of the dataframe as the header
+#         Returns the dataframe
 def rowtoHeader(copyDf):
     df = copyDf.copy()
     # Convert first row values to lowercase if they are strings
@@ -646,16 +614,25 @@ def rowtoHeader(copyDf):
     df = df.reset_index(drop=True)  # Remove the old header row, reset index
     return df
 
+# Called in cleanData()
+# Name:    setHeader
+# Parameters: Raw Dataframe
+# Desc.:   Checks header to determine whether to replace header with first row or numbered columns
+#           Returns the dataframe
 def setHeader(copyDf):
     df = copyDf.copy()
     # If header exists, convert first row into header
-    if checkHeader(df) or (st.button("Click if a header exists?")): 
+    if (checkHeader(df)): 
         df = rowtoHeader(df)
     else:
         df.columns = [f"col_{i}" for i in range(len(df.columns))]
     return df
 
-@st.cache_data
+# Name:     dateTimeColumn
+# Parameters: Dataframe column
+# Desc.:    Compares the column to different possible datetime formats
+#           Converts the column if datetime format is found and is able to successfully convert
+#           Returns the converted (or non-converted) column
 def dateTimeColumn(series):
     s = series.copy()
 
@@ -674,7 +651,7 @@ def dateTimeColumn(series):
 
     successful = False
     # Try generic formats first
-    for fmt in genericFormats + dateFormats + timeFormats:
+    for fmt in dateFormats + timeFormats + genericFormats:
         try:
             converted = pd.to_datetime(s, format=fmt, errors='coerce')
             # if conversion produced some dates (not all NaT), accept
@@ -690,6 +667,10 @@ def dateTimeColumn(series):
         return series
     return s
 
+# Name:     getDateTime
+# Parameters: Raw Dataframe
+# Desc.:    Uses any existing date columns in state to apply to dataframe
+#           Returns the dataframe
 def getDateTime(copyDf):
     df = copyDf.copy()
     dateColumns = []
@@ -710,7 +691,10 @@ def getDateTime(copyDf):
         df = df.rename(columns={dateColumns[0]: 'date1'})
     return df
 
-@st.cache_data
+# Name:     displayDates()
+# Parameters: Cleaned Dataframe
+# Desc.:    Displays all the numeric colums grouped by their dates (if a date column exists)
+#           Returns list of columns grouped by the average
 def displayDates(df):
     # Numeric columns to aggregate
     numericColumns = df.select_dtypes(include=['number']).columns
@@ -728,6 +712,11 @@ def displayDates(df):
 
     return output
 
+# Name:     cleanData()
+# Parameters: Raw Dataframe
+# Desc.:    Main function that calls all the functions above to process the dataframe, 
+#           set the correct datatypes, and to handle common placeholder values
+#           Returns the processed dataframe
 @st.cache_data
 def cleanData(copyDf):
     df = copyDf.copy()
@@ -799,7 +788,7 @@ def findPercentiles(df, dfPercent, choice):
             "Values": values
         }
 
-    return pd.DataFrame(results).T
+    return pd.DataFrame(results)
 
 def showMathInfo(df):
     numericCols = df.select_dtypes(include=['number'])
@@ -822,11 +811,17 @@ def saveStatistics(df, statistic, rotate=True):
     if df is not None and not df.empty:
         if rotate:
             df = df.T
+
+        colToSave = st.selectbox("Select column to save", df.columns.tolist())
+
+        defaultFilename = f"{st.session_state.filename + statistic}_{colToSave}"
+        fileName = st.text_input("Filename for download", defaultFilename, max_chars=40)
+
         csv = df.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label=f"Download {st.session_state.filename + statistic}.csv",
+            label=f"Download {fileName}.csv",
             data=csv,
-            file_name=f"{st.session_state.filename + statistic}.csv",
+            file_name=f"{fileName}.csv",
             mime="text/csv"
         )
 
