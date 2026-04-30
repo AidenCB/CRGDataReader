@@ -32,10 +32,7 @@ Users can upload CSV, Excel, or TXT files, inspect and clean the data, perform s
 -  Extract components of datetime columns (year, month, day, hour, minute, second).
 
 ###  Visualization:
--  Histogram and boxplot for numeric columns.
--  Scatter plots for numeric comparisons.
--  Bar charts for categorical data.
--  Correlation heatmaps.
+-  Wavelet Power Spectrums
 
 ###  Export:
 -  Download the cleaned and edited dataset as CSV:
