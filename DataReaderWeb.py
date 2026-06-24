@@ -4,7 +4,17 @@ import numpy as np
 
 import base64
 import io
+import logging
 from pathlib import Path
+
+APP_DIR = Path(__file__).resolve().parent
+ASSET_DIR = APP_DIR / "images"
+PAGE_ICON_PATH = ASSET_DIR / "RamapoArch.png"
+MAX_UPLOAD_SIZE_MB = 200
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+ALLOWED_UPLOAD_EXTENSIONS = (".csv", ".xlsx", ".xls", ".txt")
+
+logger = logging.getLogger(__name__)
 
 NOAA_PRESET = "NOAA daily climate"
 GENERIC_PRESET = "Generic data"
@@ -56,13 +66,23 @@ DERIVED_STATE_KEYS = [
 ]
 
 def main():
-    st.set_page_config(page_title="DataReader Web", layout="wide", page_icon="images/RamapoArch.png")
+    st.set_page_config(
+        page_title="DataReader Web",
+        layout="wide",
+        page_icon=str(PAGE_ICON_PATH) if PAGE_ICON_PATH.exists() else None,
+    )
     render_app_header()
 
     upload_options = render_upload_controls()
     uploadedFile = upload_options["uploaded_file"]
 
     if uploadedFile is None:
+        return
+
+    try:
+        validate_uploaded_file(uploadedFile, upload_options["separator"])
+    except ValueError as e:
+        st.error(str(e))
         return
 
     upload_config = build_upload_config(uploadedFile, upload_options)
@@ -80,13 +100,14 @@ def main():
                 date_dayfirst=upload_options["date_dayfirst"]
             )
 
-            st.session_state[STATE_FILENAME] = uploadedFile.name.rsplit(".", 1)[0]
+            st.session_state[STATE_FILENAME] = safeFilename(uploadedFile.name, default="data", strip_extension=True)
             st.session_state[STATE_RAW_DF] = dfRaw.copy()
             st.session_state[STATE_WORKING_DF] = workingDf
             st.success("File uploaded successfully.")
 
         except Exception as e:
-            st.error(f"Error reading file: {e}")
+            logger.exception("Failed to read uploaded file %s", getattr(uploadedFile, "name", "unknown"))
+            st.error("The file could not be read. Check the file format and separator, then try again.")
             st.session_state[STATE_WORKING_DF] = None
 
     workingDf = st.session_state.get(STATE_WORKING_DF)
@@ -129,7 +150,7 @@ def main():
         render_export(st.session_state.get(STATE_WORKING_DF, workingDf))
 
 def render_app_header():
-    logo_uri = imageDataUri("images/whiteRamapoLogo.png")
+    logo_uri = imageDataUri(ASSET_DIR / "whiteRamapoLogo.png")
     logo_html = f'<img src="{logo_uri}" alt="Ramapo College logo" />' if logo_uri else '<strong>RAMAPO COLLEGE</strong>'
 
     st.markdown("""
@@ -355,17 +376,22 @@ def render_upload_controls():
     }
 
 def render_view_data(workingDf):
-    max_rows = max(10, workingDf.shape[0])
+    row_count = workingDf.shape[0]
+    if row_count == 0:
+        st.info("The loaded data has columns but no rows.")
+        st.dataframe(workingDf)
+        return
+
     numShow = st.number_input(
-        f"Rows to show (min. 10 / max {workingDf.shape[0]})",
-        min_value=10,
-        max_value=max_rows,
-        value=10
+        f"Rows to show (1-{row_count})",
+        min_value=1,
+        max_value=row_count,
+        value=min(10, row_count)
     )
     st.dataframe(view_head(workingDf, numShow))
 
 def render_statistics(workingDf):
-    catColNames = workingDf.select_dtypes(include=['object', 'category']).columns.tolist()
+    catColNames = workingDf.select_dtypes(include=['object', 'category', 'string']).columns.tolist()
     numericCols = workingDf.select_dtypes(include=['number']).columns.tolist()
 
     available_stat_types = []
@@ -486,7 +512,11 @@ def render_percentile_tools(workingDf):
 
     if not filtered.empty:
         csv = filtered.to_csv(index=False).encode('utf-8')
-        defaultName = f"{st.session_state.get(STATE_FILENAME, 'data')}_{filterCol}_{choice.replace(' ', '_')}_{pctLabel}pct.csv"
+        defaultName = downloadFilename(
+            f"{st.session_state.get(STATE_FILENAME, 'data')}_{filterCol}_{choice.replace(' ', '_')}_{pctLabel}pct",
+            "csv",
+            default="filtered_data"
+        )
         exportName = st.text_input("Export filename", defaultName, max_chars=60, key="pctl_export_name")
         if st.button("Keep filtered rows as working data", key="pctl_keep_filtered"):
             set_working_df(filtered.reset_index(drop=True))
@@ -496,7 +526,7 @@ def render_percentile_tools(workingDf):
         st.download_button(
             label=f"Download filtered data ({len(filtered)} rows)",
             data=csv,
-            file_name=exportName,
+            file_name=downloadFilename(exportName, "csv", default="filtered_data"),
             mime="text/csv",
             key="pctl_download"
         )
@@ -537,6 +567,10 @@ def render_categorical_statistics(workingDf, catColNames):
 
 def render_datatypes(workingDf):
     st.subheader("View/Change Datatypes")
+    if workingDf.shape[1] == 0:
+        st.info("No columns are available.")
+        return
+
     st.write(workingDf.dtypes)
 
     colToChange = st.selectbox("Select column to change datatype", workingDf.columns.tolist(), key="dtype_col")
@@ -556,6 +590,10 @@ def render_datatypes(workingDf):
 
 def render_edit_data(workingDf):
     st.subheader("Edit data")
+    if workingDf.shape[1] == 0:
+        st.info("No columns are available to edit.")
+        return
+
     editAction = st.selectbox(
         "Choose edit action",
         ["Rename column", "Delete column", "Delete row", "Drop duplicates", "Sort by column", "Change Date"],
@@ -612,9 +650,12 @@ def render_delete_rows(workingDf):
             st.info("No numeric columns available for condition-based deletion.")
         else:
             userCol = st.radio("Select column to test against", columnCond, key="del_row_col")
+            defaultValue = pd.to_numeric(workingDf[userCol], errors='coerce').mean()
+            if pd.isna(defaultValue):
+                defaultValue = 0.0
             userValue = st.number_input(
                 f"Value to compare to '{userCol}' (the default is the average)",
-                value=float(workingDf[userCol].mean())
+                value=float(defaultValue)
             )
             condition = st.radio("Condition", ["Greater than", "Less than", "Equal to"], key="del_row_cond")
             rowsToDelete = rows_matching_condition(workingDf, userCol, condition, userValue)
@@ -707,9 +748,9 @@ def render_reset(preset_name, date_dayfirst):
 def render_export(workingDf):
     st.subheader("Save or export working data")
 
-    defaultFilename = "export.csv"
+    defaultFilename = "export"
     if STATE_FILENAME in st.session_state:
-        defaultFilename = f"{st.session_state[STATE_FILENAME]}_edited.csv"
+        defaultFilename = f"{st.session_state[STATE_FILENAME]}_edited"
 
     newFilename = st.text_input("Filename for download", defaultFilename, max_chars=60)
     csv = workingDf.to_csv(index=False).encode("utf-8")
@@ -717,7 +758,7 @@ def render_export(workingDf):
     st.download_button(
         label="Download CSV",
         data=csv,
-        file_name=newFilename,
+        file_name=downloadFilename(newFilename, "csv", default="export"),
         mime="text/csv"
     )
 
@@ -748,20 +789,44 @@ def get_preset_config(preset_name):
 def is_delimited_file(filename):
     return str(filename).lower().endswith((".csv", ".txt"))
 
+def validate_uploaded_file(uploaded_file, separator):
+    filename = str(getattr(uploaded_file, "name", "")).strip()
+    if not filename.lower().endswith(ALLOWED_UPLOAD_EXTENSIONS):
+        allowed = ", ".join(ALLOWED_UPLOAD_EXTENSIONS)
+        raise ValueError(f"Unsupported file type. Upload one of: {allowed}.")
+
+    size = getattr(uploaded_file, "size", None)
+    if size is not None and size > MAX_UPLOAD_SIZE_BYTES:
+        raise ValueError(f"File is too large. Maximum upload size is {MAX_UPLOAD_SIZE_MB} MB.")
+
+    if is_delimited_file(filename) and separator is not None and str(separator) == "":
+        raise ValueError("Separator cannot be empty.")
+
 def read_uploaded_file(uploaded_file, separator):
     filename = str(uploaded_file.name).lower()
     uploaded_file.seek(0)
 
     if filename.endswith((".csv", ".txt")):
-        return pd.read_csv(uploaded_file, header=None, sep=separator, engine='python')
+        try:
+            return pd.read_csv(uploaded_file, header=None, sep=separator, engine='python')
+        except pd.errors.EmptyDataError as e:
+            raise ValueError("The uploaded file is empty.") from e
+        except pd.errors.ParserError as e:
+            raise ValueError("The uploaded file could not be parsed with the selected separator.") from e
 
     if filename.endswith((".xlsx", ".xls")):
-        return pd.read_excel(uploaded_file, header=None)
+        try:
+            return pd.read_excel(uploaded_file, header=None)
+        except ValueError as e:
+            raise ValueError("The uploaded spreadsheet could not be read.") from e
 
     raise ValueError("Unsupported file type")
 
 def imageDataUri(path):
     image_path = Path(path)
+    if not image_path.is_absolute():
+        image_path = APP_DIR / image_path
+
     if not image_path.exists():
         return None
 
@@ -781,6 +846,9 @@ def checkHeader(df):
         return False
 
     totalVals = len(df.iloc[0])
+    if totalVals == 0:
+        return False
+
     stringVals = sum(isinstance(val, str) for val in df.iloc[0])
 
     if (stringVals / totalVals) < 0.85:
@@ -1087,16 +1155,33 @@ def prepareWaveletInput(df, time_col, value_col):
 
     return analysis_df.groupby("wavelet_time", as_index=False)["wavelet_value"].mean()
 
-def safeFilename(value):
-    cleaned = "".join(char if char.isalnum() else "_" for char in str(value).lower())
+def safeFilename(value, default="file", strip_extension=False):
+    raw = str(value or "").replace("\\", "/")
+    name = Path(raw).name
+    if strip_extension:
+        name = Path(name).stem
+
+    cleaned = "".join(char if char.isalnum() else "_" for char in name.lower())
     cleaned = "_".join(part for part in cleaned.split("_") if part)
-    return cleaned or "wavelet"
+    return cleaned or default
+
+def downloadFilename(value, extension, default="download"):
+    extension = extension.lstrip(".")
+    stem = safeFilename(value, default=default, strip_extension=True)
+    return f"{stem}.{extension}"
 
 def figureToPngBytes(fig):
     buf = io.BytesIO()
     fig.savefig(buf, format="png", bbox_inches='tight', facecolor=fig.get_facecolor())
     buf.seek(0)
     return buf.getvalue()
+
+def closeFigure(fig):
+    try:
+        import matplotlib.pyplot as plt
+        plt.close(fig)
+    except ImportError:
+        return
 
 # Performs Continuous Wavelet Transform inside the DataReader app
 def waveletAnalysis(years, values, x_label="Year", y_label="Data", dj=0.2, w0=6.0, s0_mult=2.0, max_period=24, title=None):
@@ -1119,10 +1204,10 @@ def waveletAnalysis(years, values, x_label="Year", y_label="Data", dj=0.2, w0=6.
     mother = wavelet.Morlet(w0)
 
     std_dev = np.std(values)
-    if std_dev > 0:
-        normalized_values = (values - np.mean(values)) / std_dev
-    else:
-        normalized_values = values - np.mean(values)
+    if std_dev <= 0:
+        raise ValueError("Wavelet analysis requires variation in the selected data column.")
+
+    normalized_values = (values - np.mean(values)) / std_dev
 
     if len(normalized_values) < 2:
         raise ValueError("Not enough data points for autocorrelation.")
@@ -1143,12 +1228,16 @@ def waveletAnalysis(years, values, x_label="Year", y_label="Data", dj=0.2, w0=6.
 
     signif, _ = wavelet.significance(1.0, dt, scales, 0, alpha=alpha_lag1, wavelet=mother)
     power = (np.abs(wave)) ** 2
+    max_power = float(np.nanmax(power))
+    if not np.isfinite(max_power) or max_power <= 0:
+        raise ValueError("Wavelet analysis could not calculate positive power for the selected data.")
+
     sig95 = power / np.outer(signif, np.ones(len(normalized_values)))
 
     with plt.style.context('dark_background'):
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        contour = ax.contourf(years, np.log2(scales), power, levels=np.linspace(0, power.max(), 100), cmap='jet')
+        contour = ax.contourf(years, np.log2(scales), power, levels=np.linspace(0, max_power, 100), cmap='jet')
         fig.colorbar(contour, ax=ax, label='Wavelet Power')
 
         try:
@@ -1255,14 +1344,24 @@ def renderWaveletSection(workingDf):
                     title=graph_title
                 )
 
-                st.pyplot(fig)
-                st.session_state[STATE_WAVELET_PNG] = figureToPngBytes(fig)
+                try:
+                    png_bytes = figureToPngBytes(fig)
+                    st.pyplot(fig)
+                finally:
+                    closeFigure(fig)
+
+                st.session_state[STATE_WAVELET_PNG] = png_bytes
                 st.session_state[STATE_WAVELET_CONFIG] = current_config
-                st.session_state[STATE_WAVELET_FILENAME] = f"wavelet_{safeFilename(value_col)}.png"
+                st.session_state[STATE_WAVELET_FILENAME] = downloadFilename(
+                    f"wavelet_{safeFilename(value_col)}",
+                    "png",
+                    default="wavelet"
+                )
                 generated_now = True
 
         except Exception as e:
-            st.error(f"An error occurred during wavelet analysis: {e}")
+            logger.exception("Wavelet analysis failed")
+            st.error("Wavelet analysis could not be completed for the selected columns and settings.")
 
     if (
         st.session_state.get(STATE_WAVELET_PNG) is not None
@@ -1277,8 +1376,7 @@ def renderWaveletSection(workingDf):
             max_chars=80,
             key="wavelet_download_filename"
         )
-        if not download_name.lower().endswith(".png"):
-            download_name = f"{download_name}.png"
+        download_name = downloadFilename(download_name, "png", default="wavelet")
 
         st.download_button(
             label="Download Graph as PNG",
@@ -1411,7 +1509,7 @@ def showMathInfo(df):
         
 # Retrieves statistical properties for categorical columns
 def showCategoricalInfo(df):
-    catCols = df.select_dtypes(include=['object', 'category'])
+    catCols = df.select_dtypes(include=['object', 'category', 'string'])
     if catCols.shape[1] == 0:
         return None
 
@@ -1428,12 +1526,13 @@ def saveStatistics(df, statistic, rotate=True, widget_prefix="save"):
 
             defaultFilename = f"{st.session_state.get(STATE_FILENAME, 'data')}{statistic}_{colToSave}"
             fileName = st.text_input("Filename for download", defaultFilename, max_chars=40, key=f"{widget_prefix}_filename")
+            download_name = downloadFilename(fileName, "csv", default="statistics")
 
             csv = df.to_csv(index=True).encode('utf-8')
             st.download_button(
-                label=f"Download {fileName}.csv",
+                label=f"Download {download_name}",
                 data=csv,
-                file_name=f"{fileName}.csv",
+                file_name=download_name,
                 mime="text/csv",
                 key=f"{widget_prefix}_download"
             )
