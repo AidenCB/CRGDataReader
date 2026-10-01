@@ -123,60 +123,22 @@ def dateTimeColumn(series):
     # Copy so we don’t mutate input directly
     s = series.copy()
 
-    dateFormats = ["%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y",
-                   "%m/%d/%y", "%m-%d-%y", "%d/%m/%y", "%d-%m-%y"]
-
-    timeFormats = ["%H:%M:%S", "%H:%M", "%H-%M-%S", "%H-%M",
-                   "%H.%M.%S", "%H.%M"]
-
-    genericFormats = [
-        "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m-%d-%Y %H:%M:%S", "%m-%d-%Y %H:%M",
-        "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M",
-        "%m/%d/%y %H:%M:%S", "%m/%d/%y %H:%M", "%m-%d-%y %H:%M:%S", "%m-%d-%y %H:%M",
-        "%d/%m/%y %H:%M:%S", "%d/%m/%y %H:%M", "%d-%m-%y %H:%M:%S", "%d-%m-%y %H:%M", "%YYYY"
-    ]
-
-    successful = False
-
-    # Try based on column name hint
-    colname = s.name.lower() if isinstance(s.name, str) else ""
-
-    if "date" in colname:
-        for fmt in genericFormats + dateFormats:
-            converted = pd.to_datetime(s, format=fmt, errors="coerce")
-            if not converted.isna().all():
-                s = converted
-                successful = True
-                break
-
-    elif "time" in colname:
-        for fmt in timeFormats:
-            converted = pd.to_datetime(s, format=fmt, errors="coerce")
-            if not converted.isna().all():
-                s = converted.dt.time
-                successful = True
-                break
-
-    # Try all generic formats if nothing worked yet
-    if not successful:
-        for fmt in genericFormats + dateFormats + timeFormats:
-            converted = pd.to_datetime(s, format=fmt, errors="coerce")
-            if not converted.isna().all():
-                if "H" in fmt:   # crude check → format includes time
-                    try:
-                        s = converted.dt.time
-                    except Exception:
-                        s = converted
-                else:
-                    s = converted
-                successful = True
-                break
-
-    # If still failed, return original
-    if not successful:
+    # Leverage mixed format parsing for maximum robustness
+    converted = pd.to_datetime(s, format='mixed', dayfirst=False, errors="coerce")
+    
+    if converted.isna().all():
         return series
 
-    return s
+    colname = s.name.lower() if isinstance(s.name, str) else ""
+    
+    # If the column is strictly a 'time' column, return just the time object
+    if "time" in colname and "date" not in colname:
+        try:
+            return converted.dt.time
+        except Exception:
+            return converted
+            
+    return converted
 
 # Function to test columns against different date formats
 def getDateTime(copyDf):
